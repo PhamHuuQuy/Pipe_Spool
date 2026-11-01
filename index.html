@@ -114,8 +114,15 @@
   <small>Bản thử giao diện — dữ liệu chỉ lưu tạm trên trình duyệt, chưa nối Google Sheet</small>
 </header>
 <main>
-
-  <div class="card">
+ 
+  <div class="card" id="connCardCollapsed" hidden>
+    <div class="row" style="align-items:center">
+      <div style="font-size:13px;"><span class="rowTag ok">✔ Đã kết nối Google Sheet</span></div>
+      <button class="btn-sec btn-sm" id="btnExpandConn" style="flex:none">Đổi URL</button>
+    </div>
+  </div>
+ 
+  <div class="card" id="connCardExpanded">
     <h3>⚙️ Kết nối Google Sheet</h3>
     <div style="font-size:12.5px; color:var(--mute); margin-bottom:6px;">Dán "Web app URL" đã deploy từ Google Apps Script (xem hướng dẫn trong file Code_PipeSpool.gs) để app đọc/ghi trực tiếp vào các sheet DanhSachChiTiet/TrangThaiSanPham/LichSuCapNhat trên Google Sheet. Để trống thì app chạy ở chế độ thử (lưu tạm trên trình duyệt, mất khi tắt trang).</div>
     <div class="row">
@@ -124,7 +131,7 @@
     </div>
     <div class="msg" id="urlMsg"></div>
   </div>
-
+ 
   <div class="card">
     <h3>1. Nhập / quét mã chi tiết</h3>
     <label for="codeInput">Chỉ cần nhập số và chữ liền nhau theo đúng thứ tự (không cần gõ dấu "-" hay "SP"), hệ thống sẽ tự chèn: 3 số – 2/3 chữ – 5 số – 2 số – rồi tự ghép "-SP" + 2 số cuối</label>
@@ -133,7 +140,7 @@
       <button class="clearBtn" id="btnClear" type="button" title="Xóa nội dung">✕</button>
     </div>
     <div class="parsed" id="parsedInfo"></div>
-
+ 
     <div class="row" style="margin-top:10px">
       <button class="btn-sec btn-sm" id="btnCam">🎥 Quét QR bằng camera</button>
       <button class="btn-pri btn-sm" id="btnLoad">Tra cứu mã này</button>
@@ -147,7 +154,7 @@
     </div>
     <div class="msg" id="camMsg"></div>
   </div>
-
+ 
   <div class="card" id="stageCard" hidden>
     <h3>2. Trạng thái / công đoạn hiện tại</h3>
     <div class="detailBox" id="detailBox"></div>
@@ -169,7 +176,7 @@
     </div>
     <div class="msg" id="saveMsg"></div>
   </div>
-
+ 
   <div class="card">
     <h3>3. Danh sách chi tiết (giống sheet DanhSachChiTiet / file Excel checklist)</h3>
     <div style="font-size:12.5px; color:var(--mute); margin-bottom:6px;">Mã nào quét/tra cứu mà chưa có trong danh sách sẽ được <b>tự thêm</b> một dòng mới (tô vàng) để bổ sung sau — bấm "Sửa" để điền, điền xong hết phần cần thiết dòng sẽ tự hết tô màu. Thực tế sẽ liên kết với file Excel checklist trên máy bạn.</div>
@@ -178,7 +185,7 @@
       <button class="btn-sec btn-sm" data-demo="456DEF450060703">Thử: quét mã chưa có trong danh sách (456DEF450060703)</button>
     </div>
   </div>
-
+ 
   <div class="card">
     <h3>4. Xem trước bảng theo dõi (giống sheet TrangThaiSanPham sẽ tạo)</h3>
     <div id="previewWrap"><div class="empty">Chưa có dữ liệu — hãy nhập 1 mã và xác nhận công đoạn ở trên để xem thử.</div></div>
@@ -192,15 +199,15 @@
       </div>
     </details>
   </div>
-
+ 
   <div class="card">
     <h3>5. Xem trước lịch sử cập nhật (giống sheet LichSuCapNhat sẽ tạo)</h3>
     <div style="font-size:12.5px; color:var(--mute); margin-bottom:6px;">Mỗi lần tra cứu hoặc xác nhận lưu (dù công đoạn không đổi) đều được ghi 1 dòng ở đây kèm thời gian, để biết lần gần nhất có ai đụng vào mã này là khi nào.</div>
     <div id="logWrap"><div class="empty">Chưa có hoạt động nào.</div></div>
   </div>
-
+ 
 </main>
-
+ 
 <div class="overlay" id="paintOverlay">
   <div class="modal">
     <div class="modalTop"><h3>📖 Bảng mã màu sơn (theo Commodity)</h3><button class="closeX" id="closePaintTable">✕</button></div>
@@ -208,7 +215,7 @@
     <div class="tableScroll" id="paintTableWrap"></div>
   </div>
 </div>
-
+ 
 <div class="overlay" id="editOverlay">
   <div class="modal">
     <div class="modalTop"><h3 id="editTitle">Bổ sung thông tin chi tiết</h3><button class="closeX" id="closeEdit">✕</button></div>
@@ -244,7 +251,7 @@
     </div>
   </div>
 </div>
-
+ 
 <script>
 (function () {
   // Thứ tự công đoạn hiển thị. "Rửa axit" là nhánh thay thế cho toàn bộ 6 công đoạn sơn
@@ -261,7 +268,7 @@
   var ACID_I = IDX['Rửa axit'];             // 5
   var PAINT_START = IDX['Chuyển công đoạn sơn']; // 6
   var FINAL_I = IDX['Đóng kiện'];           // 12 — luôn được phép chọn (đóng kiện áp dụng cho mọi chi tiết)
-
+ 
   /* ---- Bảng mã màu sơn (giống sheet BangMauSon / ảnh checklist bạn gửi) ----
      Mã lưu chất (Commodity, cột J) -> Màu sơn + Ghi chú. Dùng để: (1) tự suy ra Finish Color
      cho từng chi tiết theo Commodity, (2) hiện trong nút "📖 Bảng mã màu sơn" để tra nhanh. */
@@ -285,7 +292,7 @@
     var r = BANG_MAU_SON_MAP[String(commodity || '').trim().toUpperCase()];
     return r ? r.color : '';
   }
-
+ 
   /* ---- Danh sách chi tiết (tương ứng sheet DanhSachChiTiet / file Excel checklist thật của bạn) ----
      Cấu trúc theo đúng cột trong file checklist: Drawing No., Spool No, Quantity, Weight (kgs),
      Description, Type material, Paint Type, Commodity, Paint System, Ngày giao hàng, Note — cộng
@@ -311,14 +318,14 @@
   function isIncomplete(e) {
     return !e.weight || !e.description || !e.congDoanCuoi;
   }
-
+ 
   /* ---- Kết nối Google Sheet qua Apps Script Web App (xem file Code_PipeSpool.gs) ----
      Dùng fetch GET (không dùng POST) để tránh vướng CORS preflight với Apps Script.
      Khi WEBAPP_URL rỗng, app chạy ở chế độ thử — mọi dữ liệu chỉ lưu tạm trong MASTER_LIST/DB/LOG
      ở trên, mất khi tắt trang (giữ nguyên hành vi bản thử trước đây). */
   var WEBAPP_URL = '';
   try { WEBAPP_URL = localStorage.getItem('pipeSpoolWebAppUrl') || ''; } catch (e) {}
-
+ 
   function remoteCall(action, params) {
     var qs = Object.keys(params).map(function (k) {
       var v = params[k]; return encodeURIComponent(k) + '=' + encodeURIComponent(v == null ? '' : v);
@@ -328,7 +335,7 @@
       return r.json();
     });
   }
-
+ 
   // Khi có dữ liệu từ server, đổ vào MASTER_LIST/DB cục bộ (cùng hình dạng dữ liệu local-only cũ)
   // để toàn bộ phần hiển thị/khóa công đoạn phía dưới (selectStage, renderDetailBox, renderMasterTable...)
   // dùng lại được nguyên vẹn, không cần viết lại 2 lần.
@@ -359,7 +366,7 @@
     renderMasterTable();
     renderPreview();
   }
-
+ 
   // Chế độ thử (chưa nối Google Sheet): hành vi cũ — tự tạo 1 dòng tạm trong MASTER_LIST cục bộ.
   function ensureLocalMaster(p) {
     if (!MASTER_LIST[p.code]) {
@@ -372,7 +379,7 @@
       renderMasterTable();
     }
   }
-
+ 
   /* Tính tập công đoạn ĐƯỢC PHÉP chọn cho 1 chi tiết, dựa vào "Công đoạn cuối" của nó.
      Quy tắc: 0..PRE_END luôn được phép; nếu công đoạn cuối nằm trong nhánh sơn thì mở thêm
      nhánh sơn tới đúng công đoạn cuối đó (nhánh axit bị khóa); nếu công đoạn cuối là "Rửa axit"
@@ -391,10 +398,10 @@
     // mở thêm gì — allow đã có sẵn 0..PRE_END + Đóng kiện ở trên, đúng ý rồi.
     return allow;
   }
-
+ 
   // Dữ liệu tiến độ đã lưu — thực tế sẽ lấy/lưu từ Google Sheet qua Apps Script.
   var DB = {}; // key = mã chi tiết -> { dwg, sp, stage (index đã hoàn thành tới, -1 = chưa có), updatedAt }
-
+ 
   var codeInput = document.getElementById('codeInput');
   var btnClear = document.getElementById('btnClear');
   var parsedInfo = document.getElementById('parsedInfo');
@@ -405,7 +412,7 @@
   var summaryBox = document.getElementById('summaryBox');
   var downgradeWarn = document.getElementById('downgradeWarn');
   var saveMsg = document.getElementById('saveMsg');
-
+ 
   var currentCode = null, currentParsed = null, currentMaster = null, currentAllow = null;
   var selectedStage = -1, existingStage = -1;
   var LOG = []; // lịch sử mọi tác động (tra cứu + xác nhận) — thực tế sẽ ghi vào sheet LichSuCapNhat
@@ -414,23 +421,23 @@
   var palletInput = document.getElementById('palletInput');
   var noteBox = document.getElementById('noteBox');
   var noteInput = document.getElementById('noteInput');
-
+ 
   function lastTouch(code) {
     for (var i = LOG.length - 1; i >= 0; i--) if (LOG[i].code === code) return LOG[i];
     return null;
   }
-
+ 
   function touchCount(code) {
     var n = 0;
     for (var i = 0; i < LOG.length; i++) if (LOG[i].code === code) n++;
     return n;
   }
-
+ 
   function logAction(code, action, stageLabel, pallet, note) {
     LOG.push({ time: new Date(), code: code, dwg: (currentParsed && currentParsed.dwg) || '', sp: (currentParsed && currentParsed.sp) || '', action: action, stage: stageLabel || '', pallet: pallet || '', note: note || '' });
     renderLog();
   }
-
+ 
   function renderLog() {
     var wrap = document.getElementById('logWrap');
     if (!LOG.length) { wrap.innerHTML = '<div class="empty">Chưa có hoạt động nào.</div>'; return; }
@@ -442,7 +449,7 @@
     html += '</table>';
     wrap.innerHTML = html;
   }
-
+ 
   /* ---- Tách mã chi tiết thô (chỉ số + chữ, không dấu, không "SP") theo bố cục:
      !(3 số) - *(2-3 chữ) - #(5 số) - ?(2 số) - $(2 số, số SP)
      rồi tự chèn dấu "-" giữa các mã nhỏ và chèn "SP" trước $.
@@ -456,7 +463,7 @@
     var sp = 'SP' + m[5];
     return { raw: raw, clean: clean, ok: true, code: dwg + '-' + sp, dwg: dwg, sp: sp };
   }
-
+ 
   function renderParsed(p) {
     if (!p.clean) { parsedInfo.innerHTML = ''; return; }
     if (!p.ok) {
@@ -465,9 +472,9 @@
     }
     parsedInfo.innerHTML = 'Mã chi tiết: <b>' + esc(p.code) + '</b> &nbsp;·&nbsp; DWG No: <b>' + esc(p.dwg) + '</b> &nbsp;·&nbsp; Số SP: <b>' + esc(p.sp) + '</b>';
   }
-
+ 
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
-
+ 
   codeInput.addEventListener('input', function () {
     btnClear.classList.toggle('show', !!codeInput.value);
     var p = parseCode(codeInput.value);
@@ -480,7 +487,7 @@
     parsedInfo.innerHTML = ''; stageCard.hidden = true; currentCode = null;
     codeInput.focus();
   };
-
+ 
   function buildStageList() {
     stageList.innerHTML = '';
     STAGES.forEach(function (name, i) {
@@ -495,7 +502,7 @@
     });
   }
   buildStageList();
-
+ 
   function selectStage(i) {
     if (currentAllow && !currentAllow[i]) return; // công đoạn này không áp dụng cho chi tiết này
     selectedStage = i;
@@ -530,14 +537,14 @@
     }
     noteBox.hidden = !(isDowngrade || isRepackFinal);
   }
-
+ 
   function renderStageDisabled() {
     var items = stageList.children;
     for (var k = 0; k < items.length; k++) {
       items[k].classList.toggle('disabled', !!(currentAllow && !currentAllow[k]));
     }
   }
-
+ 
   function renderDetailBox() {
     var html;
     if (!currentMaster) html = 'Chưa có công đoạn cuối trong danh sách chi tiết.';
@@ -577,7 +584,7 @@
     if (s.indexOf('violet') >= 0 || s.indexOf('tím') >= 0) return '#6b3fa0';
     return '#9aa6b2';
   }
-
+ 
   function loadCode(raw, fromLiveTyping) {
     if (!fromLiveTyping) codeInput.value = raw;
     btnClear.classList.toggle('show', !!codeInput.value);
@@ -587,7 +594,7 @@
     currentCode = p.code; currentParsed = p;
     var firstTimeThisRaw = (raw !== lastLoadedRaw);
     if (firstTimeThisRaw) lastLoadedRaw = raw;
-
+ 
     function afterLookup(isNewMaster, connErr) {
       currentMaster = MASTER_LIST[p.code];
       if (connErr) {
@@ -621,7 +628,7 @@
           isNewMaster ? 'Mã chưa có trong Danh sách chi tiết — đã tự thêm dòng mới, cần bổ sung thông tin' : '');
       }
     }
-
+ 
     if (WEBAPP_URL) {
       remoteCall('traCuu', { code: p.code, dwg: p.dwg, sp: p.sp }).then(function (resp) {
         if (!resp.ok) throw new Error(resp.error || 'Lỗi không rõ từ Google Sheet');
@@ -637,20 +644,36 @@
       afterLookup(isNewMaster, null);
     }
   }
-
+ 
   document.getElementById('btnLoad').onclick = function () { loadCode(codeInput.value); };
   document.getElementById('btnCancel').onclick = function () { stageCard.hidden = true; currentCode = null; };
-
+ 
   var webAppUrlInput = document.getElementById('webAppUrlInput');
   var urlMsg = document.getElementById('urlMsg');
+  var connCardCollapsed = document.getElementById('connCardCollapsed');
+  var connCardExpanded = document.getElementById('connCardExpanded');
   webAppUrlInput.value = WEBAPP_URL;
+ 
+  function showConnCollapsed(collapse) {
+    connCardCollapsed.hidden = !collapse;
+    connCardExpanded.hidden = collapse;
+  }
+  // Đã có URL lưu sẵn từ lần trước (localStorage) -> thu gọn ngay khi mở trang, đỡ chiếm chỗ.
+  showConnCollapsed(!!WEBAPP_URL);
+ 
+  document.getElementById('btnExpandConn').onclick = function () { showConnCollapsed(false); };
+ 
   document.getElementById('btnSaveUrl').onclick = function () {
     WEBAPP_URL = webAppUrlInput.value.trim();
     try { localStorage.setItem('pipeSpoolWebAppUrl', WEBAPP_URL); } catch (e) {}
-    if (WEBAPP_URL) { urlMsg.textContent = '✔ Đã lưu — app sẽ đọc/ghi trực tiếp vào Google Sheet.'; urlMsg.className = 'msg ok'; }
-    else { urlMsg.textContent = 'Đã xóa — app chạy chế độ thử (lưu tạm trên trình duyệt).'; urlMsg.className = 'msg'; }
+    if (WEBAPP_URL) {
+      urlMsg.textContent = '✔ Đã lưu — app sẽ đọc/ghi trực tiếp vào Google Sheet.'; urlMsg.className = 'msg ok';
+      setTimeout(function () { showConnCollapsed(true); }, 1000);
+    } else {
+      urlMsg.textContent = 'Đã xóa — app chạy chế độ thử (lưu tạm trên trình duyệt).'; urlMsg.className = 'msg';
+    }
   };
-
+ 
   document.getElementById('btnConfirm').onclick = function () {
     if (!currentCode || selectedStage < 0) return;
     var prevRec = DB[currentCode] || null;
@@ -671,7 +694,7 @@
     }
     var actionType = isDowngrade ? 'Hạ công đoạn (sửa lỗi)' : (isPalletChange ? 'Đổi Pallet' : (selectedStage === FINAL_I ? 'Đóng kiện' : 'Cập nhật công đoạn'));
     var stageNote = isPalletChange ? (STAGES[selectedStage] + ' (Pallet cũ: ' + prevPallet + ')') : STAGES[selectedStage];
-
+ 
     function afterSave() {
       logAction(currentCode, actionType, stageNote, pallet, note);
       existingStage = selectedStage;
@@ -680,7 +703,7 @@
       renderDetailBox();
       renderPreview();
     }
-
+ 
     if (WEBAPP_URL) {
       saveMsg.textContent = 'Đang lưu lên Google Sheet…'; saveMsg.className = 'msg';
       remoteCall('capNhat', {
@@ -703,7 +726,7 @@
       afterSave();
     }
   };
-
+ 
   function renderPreview() {
     var keys = Object.keys(DB);
     var wrap = document.getElementById('previewWrap');
@@ -725,7 +748,7 @@
     html += '</table>';
     wrap.innerHTML = html;
   }
-
+ 
   /* ---- 3. Bảng Danh sách chi tiết (DanhSachChiTiet) — liệt kê + bôi màu dòng thiếu thông tin ---- */
   function renderMasterTable() {
     var wrap = document.getElementById('masterTableWrap');
@@ -763,7 +786,7 @@
       btn.onclick = function () { openEditModal(btn.getAttribute('data-edit')); };
     });
   }
-
+ 
   var editOverlay = document.getElementById('editOverlay');
   var editingCode = null;
   var edCommodity = document.getElementById('edCommodity');
@@ -774,7 +797,7 @@
   STAGES.forEach(function (s) {
     var opt = document.createElement('option'); opt.value = s; opt.textContent = s; edCongDoanCuoi.appendChild(opt);
   });
-
+ 
   function openEditModal(code) {
     var e = MASTER_LIST[code];
     if (!e) return;
@@ -798,7 +821,7 @@
   document.getElementById('closeEdit').onclick = closeEditModal;
   document.getElementById('btnCancelEdit').onclick = closeEditModal;
   editOverlay.addEventListener('click', function (e) { if (e.target === editOverlay) closeEditModal(); });
-
+ 
   document.getElementById('btnSaveEdit').onclick = function () {
     if (!editingCode) return;
     var e = MASTER_LIST[editingCode];
@@ -825,7 +848,7 @@
     }
   };
   renderMasterTable();
-
+ 
   /* ---- Bảng mã màu sơn (modal tra nhanh) ---- */
   var paintOverlay = document.getElementById('paintOverlay');
   function renderPaintTable() {
@@ -840,16 +863,16 @@
   document.getElementById('btnPaintTable').onclick = function () { paintOverlay.classList.add('show'); };
   document.getElementById('closePaintTable').onclick = function () { paintOverlay.classList.remove('show'); };
   paintOverlay.addEventListener('click', function (e) { if (e.target === paintOverlay) paintOverlay.classList.remove('show'); });
-
+ 
   document.querySelectorAll('[data-demo]').forEach(function (btn) {
     btn.onclick = function () { loadCode(btn.getAttribute('data-demo')); };
   });
-
+ 
   /* ---- Camera quét QR (giống trang Pipe Support, chỉ để thử giao diện) ---- */
   var video = document.getElementById('video'), camBox = document.getElementById('camBox'), camMsg = document.getElementById('camMsg');
   var canvas = document.createElement('canvas'), ctx = canvas.getContext('2d', { willReadFrequently: true });
   var stream = null, camOn = false;
-
+ 
   function tick() {
     if (!stream || !camOn) return;
     try {
@@ -889,3 +912,4 @@
 </script>
 </body>
 </html>
+ 
