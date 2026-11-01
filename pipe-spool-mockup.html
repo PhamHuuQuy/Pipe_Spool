@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Theo dõi tiến độ Pipe Spool (bản thử)</title>
+<script>
+  (function () {
+    var sources = [
+      'https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js',
+      'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js',
+      'https://unpkg.com/jsqr@1.4.0/dist/jsQR.min.js'
+    ];
+    function tryLoad(i) {
+      if (i >= sources.length) return;
+      var s = document.createElement('script');
+      s.src = sources[i];
+      s.onload = function () { window.__jsQrLoaded = true; };
+      s.onerror = function () { tryLoad(i + 1); };
+      document.head.appendChild(s);
+    }
+    tryLoad(0);
+  })();
+</script>
+<style>
+  :root { --bg:#f4f6f8; --card:#fff; --ink:#1b2733; --mute:#5c6b7a; --pri:#1f6feb; --ok:#1a7f37; --warn:#b54708; --line:#d8dee4; --done:#e7f3ea; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+  header { padding:14px 16px; background:#1f4e78; color:#fff; font-weight:600; font-size:18px; }
+  header small { display:block; font-weight:400; font-size:12px; opacity:.85; margin-top:2px; }
+  main { padding:12px 16px 40px; max-width:620px; margin:0 auto; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:14px; }
+  .card h3 { margin:0 0 10px; font-size:15px; color:var(--mute); font-weight:600; }
+  label { display:block; font-size:13px; color:var(--mute); margin-bottom:6px; }
+  input[type=text] { width:100%; font:inherit; padding:10px; border:1px solid var(--line); border-radius:8px; }
+  .inputWrap { position:relative; }
+  .inputWrap input[type=text] { padding-right:34px; }
+  .inputWrap .clearBtn { position:absolute; right:6px; top:50%; transform:translateY(-50%); width:24px; height:24px; border-radius:50%; background:#e6eaef; color:var(--mute); border:0; padding:0; font-size:14px; line-height:1; display:none; align-items:center; justify-content:center; cursor:pointer; }
+  .inputWrap .clearBtn.show { display:flex; }
+  .row { display:flex; gap:10px; }
+  .row > * { flex:1; }
+  button { font:inherit; border:0; border-radius:10px; padding:12px 14px; font-weight:600; cursor:pointer; }
+  .btn-pri { background:var(--pri); color:#fff; }
+  .btn-sec { background:#e6eaef; color:var(--ink); }
+  .btn-ok { background:var(--ok); color:#fff; }
+  button.btn-sm { padding:8px 10px; font-size:12.5px; }
+  button:disabled { opacity:.5; cursor:default; }
+  .parsed { margin-top:8px; font-size:13px; color:var(--mute); }
+  .parsed b { color:var(--ink); }
+  .detailBox { background:#eef3f8; border-radius:8px; padding:10px 12px; font-size:14px; margin-bottom:10px; }
+  .detailBox b { color:var(--pri); }
+  .detailBox .paintSwatch { display:inline-block; width:12px; height:12px; border-radius:3px; border:1px solid rgba(0,0,0,.2); vertical-align:-1px; margin-right:4px; }
+  .detailBox .lastTouch { display:block; margin-top:4px; color:var(--mute); font-size:12.5px; }
+  .palletBox { background:#fff8e6; border:1px solid #f0d9a6; border-radius:8px; padding:10px 12px; margin:10px 0; }
+  .palletBox label { color:var(--warn); font-weight:600; }
+  .palletBox input { margin-top:0; }
+  .noteBox { background:#fdecea; border:1px solid #f3c6c1; border-radius:8px; padding:10px 12px; margin:10px 0; }
+  .noteBox label { color:#b42318; font-weight:600; }
+  .noteBox input { margin-top:0; }
+  .cam { position:relative; background:#000; border-radius:12px; overflow:hidden; aspect-ratio:1/1; margin-top:10px; display:none; }
+  .cam.show { display:block; }
+  video { width:100%; height:100%; object-fit:cover; display:block; }
+  .frame { position:absolute; inset:18%; border:3px solid rgba(255,255,255,.85); border-radius:14px; pointer-events:none; }
+  .stageScroll { max-height:46vh; overflow-y:auto; -webkit-overflow-scrolling:touch; border:1px solid var(--line); border-radius:10px; padding:4px; background:#fbfcfd; }
+  .stageList { list-style:none; margin:0; padding:0; }
+  .stageItem { display:flex; align-items:center; gap:12px; padding:10px 8px; border-radius:8px; cursor:pointer; border:1px solid transparent; }
+  .stageItem:hover { background:#f3f6fa; }
+  .stageItem.done { background:var(--done); }
+  .stageItem.current { border-color:var(--pri); background:#eaf1fd; }
+  .stageItem.disabled { cursor:not-allowed; opacity:.4; }
+  .stageItem.disabled:hover { background:none; }
+  .stageItem .num { width:26px; height:26px; border-radius:50%; background:#dfe6ec; color:var(--mute); display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; flex:none; }
+  .stageItem.done .num { background:var(--ok); color:#fff; }
+  .stageItem.current .num { background:var(--pri); color:#fff; }
+  .stageItem .lbl { flex:1; font-size:15px; }
+  .stageItem .tag { font-size:11px; color:var(--mute); }
+  .summary { background:#eef3f8; border-radius:8px; padding:10px 12px; font-size:14px; margin:12px 0; }
+  .summary b { color:var(--pri); }
+  .warn { background:#fff4e5; color:var(--warn); border-radius:8px; padding:8px 10px; font-size:13px; margin:10px 0; }
+  .warn:empty, .warn.hide { display:none; }
+  .msg { font-size:13px; color:var(--mute); margin-top:8px; min-height:16px; }
+  .msg.ok { color:var(--ok); font-weight:600; }
+  .msg.err { color:#b42318; }
+  table { width:100%; border-collapse:collapse; font-size:13px; margin-top:4px; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); }
+  th { color:var(--mute); font-weight:600; font-size:12px; }
+  .chip { display:inline-block; font-size:11px; padding:2px 8px; border-radius:999px; background:var(--done); color:var(--ok); font-weight:600; }
+  .empty { color:var(--mute); font-size:13px; padding:10px 0; text-align:center; }
+  details summary { cursor:pointer; color:var(--mute); font-size:13px; }
+  .tableScroll { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .tableScroll table { white-space:nowrap; }
+  tr.incomplete td { background:#fff6d6; }
+  tr.incomplete td:first-child { border-left:3px solid #b88a00; }
+  .rowTag { font-size:10.5px; font-weight:700; padding:2px 6px; border-radius:999px; }
+  .rowTag.ok { background:var(--done); color:var(--ok); }
+  .rowTag.bad { background:#fff0b3; color:#8a6300; }
+  .linkBtn { background:none; border:0; color:var(--pri); font-weight:600; cursor:pointer; padding:4px 6px; font-size:12.5px; text-decoration:underline; }
+  .overlay { position:fixed; inset:0; background:rgba(15,23,32,.55); display:none; align-items:flex-start; justify-content:center; padding:24px 14px; overflow-y:auto; z-index:50; }
+  .overlay.show { display:flex; }
+  .modal { background:#fff; border-radius:12px; padding:16px; max-width:560px; width:100%; margin-top:10px; }
+  .modal h3 { margin:0 0 10px; font-size:15px; }
+  .modal .modalTop { display:flex; justify-content:space-between; align-items:center; }
+  .modal .closeX { background:#e6eaef; border:0; border-radius:50%; width:28px; height:28px; cursor:pointer; font-size:14px; }
+  .field { margin-bottom:10px; }
+  .field label { margin-bottom:4px; }
+  .field2 { display:flex; gap:8px; }
+  .field2 > * { flex:1; }
+  select { width:100%; font:inherit; padding:10px; border:1px solid var(--line); border-radius:8px; background:#fff; }
+</style>
+</head>
+<body>
+<header>
+  Theo dõi tiến độ Pipe Spool
+  <small>Bản thử giao diện — dữ liệu chỉ lưu tạm trên trình duyệt, chưa nối Google Sheet</small>
+</header>
+<main>
+
+  <div class="card">
+    <h3>⚙️ Kết nối Google Sheet</h3>
+    <div style="font-size:12.5px; color:var(--mute); margin-bottom:6px;">Dán "Web app URL" đã deploy từ Google Apps Script (xem hướng dẫn trong file Code_PipeSpool.gs) để app đọc/ghi trực tiếp vào các sheet DanhSachChiTiet/TrangThaiSanPham/LichSuCapNhat trên Google Sheet. Để trống thì app chạy ở chế độ thử (lưu tạm trên trình duyệt, mất khi tắt trang).</div>
+    <div class="row">
+      <input type="text" id="webAppUrlInput" placeholder="https://script.google.com/macros/s/..../exec">
+      <button class="btn-pri btn-sm" id="btnSaveUrl">Lưu</button>
+    </div>
+    <div class="msg" id="urlMsg"></div>
+  </div>
+
+  <div class="card">
+    <h3>1. Nhập / quét mã chi tiết</h3>
+    <label for="codeInput">Chỉ cần nhập số và chữ liền nhau theo đúng thứ tự (không cần gõ dấu "-" hay "SP"), hệ thống sẽ tự chèn: 3 số – 2/3 chữ – 5 số – 2 số – rồi tự ghép "-SP" + 2 số cuối</label>
+    <div class="inputWrap">
+      <input type="text" id="codeInput" placeholder="VD: 123ABC310010501" autocapitalize="characters">
+      <button class="clearBtn" id="btnClear" type="button" title="Xóa nội dung">✕</button>
+    </div>
+    <div class="parsed" id="parsedInfo"></div>
+
+    <div class="row" style="margin-top:10px">
+      <button class="btn-sec btn-sm" id="btnCam">🎥 Quét QR bằng camera</button>
+      <button class="btn-pri btn-sm" id="btnLoad">Tra cứu mã này</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button class="btn-sec btn-sm" id="btnPaintTable">📖 Bảng mã màu sơn</button>
+    </div>
+    <div class="cam" id="camBox">
+      <video id="video" playsinline muted></video>
+      <div class="frame"></div>
+    </div>
+    <div class="msg" id="camMsg"></div>
+  </div>
+
+  <div class="card" id="stageCard" hidden>
+    <h3>2. Trạng thái / công đoạn hiện tại</h3>
+    <div class="detailBox" id="detailBox"></div>
+    <div class="warn" id="notFoundWarn"></div>
+    <div class="warn" id="downgradeWarn"></div>
+    <div class="stageScroll"><ol class="stageList" id="stageList"></ol></div>
+    <div id="palletBox" class="palletBox" hidden>
+      <label for="palletInput">Số Pallet (bắt buộc khi Đóng kiện — đổi số khác ở đây nếu chuyển sang Pallet khác)</label>
+      <input type="text" id="palletInput" placeholder="VD: PLT-001">
+    </div>
+    <div id="noteBox" class="noteBox" hidden>
+      <label for="noteInput">Ghi chú lý do thay đổi</label>
+      <input type="text" id="noteInput" placeholder="VD: Phát hiện lỗi hàn, quay lại Hàn dở dang để sửa">
+    </div>
+    <div class="summary" id="summaryBox"></div>
+    <div class="row">
+      <button class="btn-sec" id="btnCancel">Hủy</button>
+      <button class="btn-ok" id="btnConfirm">Xác nhận lưu</button>
+    </div>
+    <div class="msg" id="saveMsg"></div>
+  </div>
+
+  <div class="card">
+    <h3>3. Danh sách chi tiết (giống sheet DanhSachChiTiet / file Excel checklist)</h3>
+    <div style="font-size:12.5px; color:var(--mute); margin-bottom:6px;">Mã nào quét/tra cứu mà chưa có trong danh sách sẽ được <b>tự thêm</b> một dòng mới (tô vàng) để bổ sung sau — bấm "Sửa" để điền, điền xong hết phần cần thiết dòng sẽ tự hết tô màu. Thực tế sẽ liên kết với file Excel checklist trên máy bạn.</div>
+    <div class="tableScroll" id="masterTableWrap"></div>
+    <div style="margin-top:8px">
+      <button class="btn-sec btn-sm" data-demo="456DEF450060703">Thử: quét mã chưa có trong danh sách (456DEF450060703)</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>4. Xem trước bảng theo dõi (giống sheet TrangThaiSanPham sẽ tạo)</h3>
+    <div id="previewWrap"><div class="empty">Chưa có dữ liệu — hãy nhập 1 mã và xác nhận công đoạn ở trên để xem thử.</div></div>
+    <details>
+      <summary>Có vài mã mẫu để thử nhanh</summary>
+      <div style="margin-top:8px; font-size:13px;">
+        Bấm để điền nhanh (nhập thô, chưa có dấu "-" hay "SP"):
+        <button class="btn-sec" style="padding:6px 10px;font-size:12px" data-demo="123ABC310010501">123ABC310010501</button>
+        <button class="btn-sec" style="padding:6px 10px;font-size:12px" data-demo="123ABC310010502">123ABC310010502</button>
+        <button class="btn-sec" style="padding:6px 10px;font-size:12px" data-demo="987XY900121001">987XY900121001</button>
+      </div>
+    </details>
+  </div>
+
+  <div class="card">
+    <h3>5. Xem trước lịch sử cập nhật (giống sheet LichSuCapNhat sẽ tạo)</h3>
+    <div style="font-size:12.5px; color:var(--mute); margin-bottom:6px;">Mỗi lần tra cứu hoặc xác nhận lưu (dù công đoạn không đổi) đều được ghi 1 dòng ở đây kèm thời gian, để biết lần gần nhất có ai đụng vào mã này là khi nào.</div>
+    <div id="logWrap"><div class="empty">Chưa có hoạt động nào.</div></div>
+  </div>
+
+</main>
+
+<div class="overlay" id="paintOverlay">
+  <div class="modal">
+    <div class="modalTop"><h3>📖 Bảng mã màu sơn (theo Commodity)</h3><button class="closeX" id="closePaintTable">✕</button></div>
+    <div style="font-size:12.5px; color:var(--mute); margin-bottom:8px;">Tra nhanh: mã lưu chất (Commodity, cột J bạn hay dùng) ứng với màu sơn nào.</div>
+    <div class="tableScroll" id="paintTableWrap"></div>
+  </div>
+</div>
+
+<div class="overlay" id="editOverlay">
+  <div class="modal">
+    <div class="modalTop"><h3 id="editTitle">Bổ sung thông tin chi tiết</h3><button class="closeX" id="closeEdit">✕</button></div>
+    <div class="field2">
+      <div class="field"><label>Drawing No.</label><input type="text" id="edDwg" disabled></div>
+      <div class="field"><label>Spool No</label><input type="text" id="edSp" disabled></div>
+    </div>
+    <div class="field2">
+      <div class="field"><label>Quantity</label><input type="text" id="edQty"></div>
+      <div class="field"><label>Weight (kgs)</label><input type="text" id="edWeight"></div>
+    </div>
+    <div class="field"><label>Description</label><input type="text" id="edDesc"></div>
+    <div class="field2">
+      <div class="field"><label>Type material</label><input type="text" id="edMat"></div>
+      <div class="field"><label>Paint Type</label><input type="text" id="edPtype"></div>
+    </div>
+    <div class="field2">
+      <div class="field"><label>Commodity (mã lưu chất)</label>
+        <select id="edCommodity"><option value="">— chọn —</option></select>
+      </div>
+      <div class="field"><label>Paint System</label><input type="text" id="edPsys"></div>
+    </div>
+    <div class="field2">
+      <div class="field"><label>Ngày giao hàng</label><input type="text" id="edDate" placeholder="VD: 2026-11-15"></div>
+      <div class="field"><label>Công đoạn cuối</label>
+        <select id="edCongDoanCuoi"><option value="">— chọn —</option></select>
+      </div>
+    </div>
+    <div class="field"><label>Note</label><input type="text" id="edNote"></div>
+    <div class="row">
+      <button class="btn-sec" id="btnCancelEdit">Hủy</button>
+      <button class="btn-ok" id="btnSaveEdit">Lưu thông tin</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  // Thứ tự công đoạn hiển thị. "Rửa axit" là nhánh thay thế cho toàn bộ 6 công đoạn sơn
+  // (dùng cho chi tiết không sơn, ví dụ inox) — rẽ nhánh ngay sau "Hoàn thiện hàn", cả 2
+  // nhánh đều kết thúc bằng "Đóng kiện".
+  var STAGES = [
+    'Cắt chi tiết', 'Gá đính', 'Hàn lót', 'Hàn dở dang', 'Hoàn thiện hàn',
+    'Rửa axit',
+    'Chuyển công đoạn sơn', 'Làm sạch', 'Sơn lót', 'Sơn trung gian', 'Sơn phủ', 'Hoàn thiện sơn',
+    'Đóng kiện'
+  ];
+  var IDX = {}; STAGES.forEach(function (n, i) { IDX[n] = i; });
+  var PRE_END = IDX['Hoàn thiện hàn'];      // 4 — các công đoạn 0..PRE_END luôn áp dụng cho mọi chi tiết
+  var ACID_I = IDX['Rửa axit'];             // 5
+  var PAINT_START = IDX['Chuyển công đoạn sơn']; // 6
+  var FINAL_I = IDX['Đóng kiện'];           // 12 — luôn được phép chọn (đóng kiện áp dụng cho mọi chi tiết)
+
+  /* ---- Bảng mã màu sơn (giống sheet BangMauSon / ảnh checklist bạn gửi) ----
+     Mã lưu chất (Commodity, cột J) -> Màu sơn + Ghi chú. Dùng để: (1) tự suy ra Finish Color
+     cho từng chi tiết theo Commodity, (2) hiện trong nút "📖 Bảng mã màu sơn" để tra nhanh. */
+  var BANG_MAU_SON = [
+    { code: 'NG',   color: 'Traffic White (RAL 9016)',  note: 'Natural Gas' },
+    { code: 'LNG',  color: 'Traffic White (RAL 9016)',  note: 'Liquefied Natural Gas' },
+    { code: 'IA',   color: 'Light Blue (RAL 5012)',     note: 'Instrument Air' },
+    { code: 'PA',   color: 'Light Blue (RAL 5012)',     note: 'Plant Air' },
+    { code: 'NI',   color: 'Agate Grey (RAL 7038)',     note: 'Nitrogen' },
+    { code: 'PW',   color: 'Traffic Green (RAL 6024)',  note: 'Potable Water' },
+    { code: 'FG',   color: 'Traffic Green (RAL 6024)',  note: 'Demi Water' },
+    { code: 'GW',   color: 'Signal Violet (RAL 4008)',  note: 'Glycol Water — cần xác nhận lại RAL' },
+    { code: 'DI',   color: 'Signal Brown (RAL 8002)',   note: 'Diesel Oil' },
+    { code: 'LO',   color: 'Signal Brown (RAL 8002)',   note: 'Lube Oil' },
+    { code: 'FW',   color: 'Flame Red (RAL 3000)',      note: 'Fire Water' },
+    { code: 'D',    color: 'Theo đường ống chính',      note: 'Drain: cùng màu đường ống tương ứng' },
+    { code: 'TRIM', color: 'Chưa quy định',              note: 'Trim: cập nhật sau' }
+  ];
+  var BANG_MAU_SON_MAP = {}; BANG_MAU_SON.forEach(function (r) { BANG_MAU_SON_MAP[r.code] = r; });
+  function finishColorFor(commodity) {
+    var r = BANG_MAU_SON_MAP[String(commodity || '').trim().toUpperCase()];
+    return r ? r.color : '';
+  }
+
+  /* ---- Danh sách chi tiết (tương ứng sheet DanhSachChiTiet / file Excel checklist thật của bạn) ----
+     Cấu trúc theo đúng cột trong file checklist: Drawing No., Spool No, Quantity, Weight (kgs),
+     Description, Type material, Paint Type, Commodity, Paint System, Ngày giao hàng, Note — cộng
+     thêm Công đoạn cuối (app dùng để khóa công đoạn). Finish Color SUY RA từ Commodity qua BANG_MAU_SON,
+     không nhập tay. Mã nào quét mà chưa có ở đây sẽ được tự thêm (xem loadCode) và đánh dấu "autoAdded". */
+  var MASTER_LIST = {
+    '123-ABC-31001-05-SP01': {
+      dwg: '123-ABC-31001-05', sp: 'SP01', qty: '1', weight: '10.657', description: '2" SCH10S x 2548L',
+      typeMaterial: '316L', paintType: 'Paint', commodity: 'NG', paintSystem: 'System A',
+      ngayGiaoHang: '2026-11-15', note: '', congDoanCuoi: 'Hoàn thiện sơn'
+    },
+    '123-ABC-31001-05-SP02': {
+      dwg: '123-ABC-31001-05', sp: 'SP02', qty: '1', weight: '4.873', description: '2" SCH10S x 1100L',
+      typeMaterial: '316L', paintType: '-', commodity: 'D', paintSystem: '-',
+      ngayGiaoHang: '2026-11-15', note: '', congDoanCuoi: 'Rửa axit'
+    },
+    '987-XY-90012-10-SP01': {
+      dwg: '987-XY-90012-10', sp: 'SP01', qty: '1', weight: '11.456', description: '2" SCH10S x 2748L',
+      typeMaterial: 'CS', paintType: '-', commodity: 'D', paintSystem: '-',
+      ngayGiaoHang: '', note: '', congDoanCuoi: 'Hoàn thiện hàn'
+    }
+  };
+  function isIncomplete(e) {
+    return !e.weight || !e.description || !e.congDoanCuoi;
+  }
+
+  /* ---- Kết nối Google Sheet qua Apps Script Web App (xem file Code_PipeSpool.gs) ----
+     Dùng fetch GET (không dùng POST) để tránh vướng CORS preflight với Apps Script.
+     Khi WEBAPP_URL rỗng, app chạy ở chế độ thử — mọi dữ liệu chỉ lưu tạm trong MASTER_LIST/DB/LOG
+     ở trên, mất khi tắt trang (giữ nguyên hành vi bản thử trước đây). */
+  var WEBAPP_URL = '';
+  try { WEBAPP_URL = localStorage.getItem('pipeSpoolWebAppUrl') || ''; } catch (e) {}
+
+  function remoteCall(action, params) {
+    var qs = Object.keys(params).map(function (k) {
+      var v = params[k]; return encodeURIComponent(k) + '=' + encodeURIComponent(v == null ? '' : v);
+    }).join('&');
+    return fetch(WEBAPP_URL + '?action=' + encodeURIComponent(action) + '&' + qs).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
+  }
+
+  // Khi có dữ liệu từ server, đổ vào MASTER_LIST/DB cục bộ (cùng hình dạng dữ liệu local-only cũ)
+  // để toàn bộ phần hiển thị/khóa công đoạn phía dưới (selectStage, renderDetailBox, renderMasterTable...)
+  // dùng lại được nguyên vẹn, không cần viết lại 2 lần.
+  function applyServerInfo(code, info) {
+    if (info.master) {
+      MASTER_LIST[code] = {
+        dwg: info.master.dwg || '', sp: info.master.sp || '', qty: info.master.qty || '',
+        weight: info.master.weight || '', description: info.master.description || '',
+        typeMaterial: info.master.typeMaterial || '', paintType: info.master.paintType || '',
+        commodity: info.master.commodity || '', paintSystem: info.master.paintSystem || '',
+        ngayGiaoHang: info.master.ngayGiaoHang || '', note: info.master.note || '',
+        congDoanCuoi: info.master.congDoanCuoi || '',
+        autoAdded: info.master.trangThaiDuLieu === 'Cần bổ sung'
+      };
+    }
+    if (info.status && info.status.marks) {
+      var idx = -1;
+      for (var i = 0; i < info.status.marks.length; i++) if (info.status.marks[i] === 'X') idx = i;
+      var m = MASTER_LIST[code] || {};
+      DB[code] = {
+        dwg: m.dwg || '', sp: m.sp || '', stage: idx, pallet: info.status.pallet || '', note: '',
+        updatedAt: info.status.capNhatLanCuoi ? new Date(info.status.capNhatLanCuoi) : new Date(),
+        serverTouch: info.status.soLanTacDong || 0
+      };
+    } else {
+      delete DB[code];
+    }
+    renderMasterTable();
+    renderPreview();
+  }
+
+  // Chế độ thử (chưa nối Google Sheet): hành vi cũ — tự tạo 1 dòng tạm trong MASTER_LIST cục bộ.
+  function ensureLocalMaster(p) {
+    if (!MASTER_LIST[p.code]) {
+      MASTER_LIST[p.code] = {
+        dwg: p.dwg, sp: p.sp, qty: '', weight: '', description: '', typeMaterial: '', paintType: '',
+        commodity: '', paintSystem: '', ngayGiaoHang: '',
+        note: 'Tự thêm khi quét lần đầu (tạm, chưa nối Google Sheet) — cần bổ sung thông tin',
+        congDoanCuoi: '', autoAdded: true
+      };
+      renderMasterTable();
+    }
+  }
+
+  /* Tính tập công đoạn ĐƯỢC PHÉP chọn cho 1 chi tiết, dựa vào "Công đoạn cuối" của nó.
+     Quy tắc: 0..PRE_END luôn được phép; nếu công đoạn cuối nằm trong nhánh sơn thì mở thêm
+     nhánh sơn tới đúng công đoạn cuối đó (nhánh axit bị khóa); nếu công đoạn cuối là "Rửa axit"
+     thì chỉ mở thêm đúng công đoạn Rửa axit (nhánh sơn bị khóa); "Đóng kiện" luôn được phép. */
+  function allowedSet(congDoanCuoi) {
+    var allow = {};
+    for (var i = 0; i <= PRE_END; i++) allow[i] = true;
+    allow[FINAL_I] = true;
+    var ci = IDX[congDoanCuoi];
+    if (ci === ACID_I) {
+      allow[ACID_I] = true;
+    } else if (ci >= PAINT_START && ci < FINAL_I) {
+      for (var j = PAINT_START; j <= ci; j++) allow[j] = true;
+    }
+    // Nếu công đoạn cuối chỉ nằm trong khoảng 0..PRE_END (ví dụ "Hoàn thiện hàn") thì không
+    // mở thêm gì — allow đã có sẵn 0..PRE_END + Đóng kiện ở trên, đúng ý rồi.
+    return allow;
+  }
+
+  // Dữ liệu tiến độ đã lưu — thực tế sẽ lấy/lưu từ Google Sheet qua Apps Script.
+  var DB = {}; // key = mã chi tiết -> { dwg, sp, stage (index đã hoàn thành tới, -1 = chưa có), updatedAt }
+
+  var codeInput = document.getElementById('codeInput');
+  var btnClear = document.getElementById('btnClear');
+  var parsedInfo = document.getElementById('parsedInfo');
+  var detailBox = document.getElementById('detailBox');
+  var notFoundWarn = document.getElementById('notFoundWarn');
+  var stageCard = document.getElementById('stageCard');
+  var stageList = document.getElementById('stageList');
+  var summaryBox = document.getElementById('summaryBox');
+  var downgradeWarn = document.getElementById('downgradeWarn');
+  var saveMsg = document.getElementById('saveMsg');
+
+  var currentCode = null, currentParsed = null, currentMaster = null, currentAllow = null;
+  var selectedStage = -1, existingStage = -1;
+  var LOG = []; // lịch sử mọi tác động (tra cứu + xác nhận) — thực tế sẽ ghi vào sheet LichSuCapNhat
+  var lastLoadedRaw = null;
+  var palletBox = document.getElementById('palletBox');
+  var palletInput = document.getElementById('palletInput');
+  var noteBox = document.getElementById('noteBox');
+  var noteInput = document.getElementById('noteInput');
+
+  function lastTouch(code) {
+    for (var i = LOG.length - 1; i >= 0; i--) if (LOG[i].code === code) return LOG[i];
+    return null;
+  }
+
+  function touchCount(code) {
+    var n = 0;
+    for (var i = 0; i < LOG.length; i++) if (LOG[i].code === code) n++;
+    return n;
+  }
+
+  function logAction(code, action, stageLabel, pallet, note) {
+    LOG.push({ time: new Date(), code: code, dwg: (currentParsed && currentParsed.dwg) || '', sp: (currentParsed && currentParsed.sp) || '', action: action, stage: stageLabel || '', pallet: pallet || '', note: note || '' });
+    renderLog();
+  }
+
+  function renderLog() {
+    var wrap = document.getElementById('logWrap');
+    if (!LOG.length) { wrap.innerHTML = '<div class="empty">Chưa có hoạt động nào.</div>'; return; }
+    var html = '<table><tr><th>Thời gian</th><th>Mã chi tiết</th><th>Drawing No.</th><th>Spool No</th><th>Hành động</th><th>Công đoạn</th><th>Pallet</th><th>Ghi chú</th></tr>';
+    for (var i = LOG.length - 1; i >= 0; i--) {
+      var g = LOG[i];
+      html += '<tr><td>' + g.time.toLocaleString('vi-VN') + '</td><td>' + esc(g.code) + '</td><td>' + esc(g.dwg) + '</td><td>' + esc(g.sp) + '</td><td>' + esc(g.action) + '</td><td>' + esc(g.stage) + '</td><td>' + esc(g.pallet || '—') + '</td><td>' + esc(g.note || '—') + '</td></tr>';
+    }
+    html += '</table>';
+    wrap.innerHTML = html;
+  }
+
+  /* ---- Tách mã chi tiết thô (chỉ số + chữ, không dấu, không "SP") theo bố cục:
+     !(3 số) - *(2-3 chữ) - #(5 số) - ?(2 số) - $(2 số, số SP)
+     rồi tự chèn dấu "-" giữa các mã nhỏ và chèn "SP" trước $.
+     Ví dụ nhập "123ABC310010501" -> DWG No "123-ABC-31001-05", Mã chi tiết "123-ABC-31001-05-SP01". */
+  var RAW_RE = /^(\d{3})([A-Za-z]{2,3})(\d{5})(\d{2})(\d{2})$/;
+  function parseCode(raw) {
+    var clean = String(raw || '').trim().replace(/[-_\s]/g, '').replace(/SP/ig, '').toUpperCase();
+    var m = clean.match(RAW_RE);
+    if (!m) return { raw: raw, clean: clean, ok: false, code: '', dwg: '', sp: '' };
+    var dwg = m[1] + '-' + m[2] + '-' + m[3] + '-' + m[4];
+    var sp = 'SP' + m[5];
+    return { raw: raw, clean: clean, ok: true, code: dwg + '-' + sp, dwg: dwg, sp: sp };
+  }
+
+  function renderParsed(p) {
+    if (!p.clean) { parsedInfo.innerHTML = ''; return; }
+    if (!p.ok) {
+      parsedInfo.innerHTML = '<span style="color:var(--warn)">Chưa đủ/đúng định dạng (cần đúng: 3 số, 2–3 chữ, 5 số, 2 số, 2 số — liền nhau, không dấu). Đã nhập: ' + esc(p.clean) + '</span>';
+      return;
+    }
+    parsedInfo.innerHTML = 'Mã chi tiết: <b>' + esc(p.code) + '</b> &nbsp;·&nbsp; DWG No: <b>' + esc(p.dwg) + '</b> &nbsp;·&nbsp; Số SP: <b>' + esc(p.sp) + '</b>';
+  }
+
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+
+  codeInput.addEventListener('input', function () {
+    btnClear.classList.toggle('show', !!codeInput.value);
+    var p = parseCode(codeInput.value);
+    renderParsed(p);
+    if (p.ok) loadCode(codeInput.value, true); // bố cục đúng -> tự tra cứu & hiện công đoạn ngay, không cần bấm nút
+    else stageCard.hidden = true;
+  });
+  btnClear.onclick = function () {
+    codeInput.value = ''; btnClear.classList.remove('show');
+    parsedInfo.innerHTML = ''; stageCard.hidden = true; currentCode = null;
+    codeInput.focus();
+  };
+
+  function buildStageList() {
+    stageList.innerHTML = '';
+    STAGES.forEach(function (name, i) {
+      var li = document.createElement('li');
+      li.className = 'stageItem';
+      li.innerHTML = '<input type="checkbox" data-chk style="width:20px;height:20px;flex:none">' +
+        '<div class="lbl">' + (i + 1) + '. ' + esc(name) + '</div><div class="tag" data-tag></div>';
+      li.onclick = function () { if (!li.classList.contains('disabled')) selectStage(i); };
+      var chk = li.querySelector('[data-chk]');
+      chk.onclick = function (e) { e.preventDefault(); e.stopPropagation(); if (!li.classList.contains('disabled')) selectStage(i); };
+      stageList.appendChild(li);
+    });
+  }
+  buildStageList();
+
+  function selectStage(i) {
+    if (currentAllow && !currentAllow[i]) return; // công đoạn này không áp dụng cho chi tiết này
+    selectedStage = i;
+    var items = stageList.children;
+    for (var k = 0; k < items.length; k++) {
+      items[k].classList.remove('done', 'current');
+      var tag = items[k].querySelector('[data-tag]'); tag.textContent = '';
+      var chk = items[k].querySelector('[data-chk]');
+      chk.checked = (k <= i) && (!currentAllow || currentAllow[k]);
+      if (k < i) { items[k].classList.add('done'); tag.textContent = 'Đã xong (tự động)'; }
+      else if (k === i) { items[k].classList.add('current'); tag.textContent = 'Công đoạn chọn lần này'; }
+    }
+    summaryBox.innerHTML = 'Sẽ lưu: hoàn thành đến công đoạn <b>' + (i + 1) + '/' + STAGES.length + ' – ' + esc(STAGES[i]) + '</b>. Các công đoạn áp dụng đứng trước đó tự động được tính là đã hoàn thành.';
+    var rec0 = currentCode ? DB[currentCode] : null;
+    var prevPallet = rec0 ? rec0.pallet : '';
+    if (i === FINAL_I) {
+      palletBox.hidden = false;
+      if (prevPallet && !palletInput.value) palletInput.value = prevPallet;
+    } else {
+      palletBox.hidden = true;
+    }
+    var isDowngrade = existingStage >= 0 && i < existingStage;
+    var isRepackFinal = i === FINAL_I && existingStage === FINAL_I; // đã đóng kiện trước đó, đang xác nhận lại/đổi pallet
+    if (isDowngrade) {
+      downgradeWarn.classList.remove('hide');
+      downgradeWarn.textContent = '⚠ Mã này trước đó đã ghi nhận tới công đoạn ' + (existingStage + 1) + ' (' + STAGES[existingStage] + '), cao hơn công đoạn vừa chọn. Nếu xác nhận, trạng thái sẽ bị HẠ XUỐNG để xử lý lỗi/phát sinh — việc này sẽ được ghi lại đầy đủ trong lịch sử. Hãy nhập lý do bên dưới trước khi xác nhận.';
+    } else if (isRepackFinal) {
+      downgradeWarn.classList.remove('hide');
+      downgradeWarn.textContent = '⚠ Mã này đã từng Đóng kiện (Pallet trước: ' + esc(prevPallet || '—') + '). Nếu đổi sang Pallet khác, hãy nhập lý do bên dưới trước khi xác nhận.';
+    } else {
+      downgradeWarn.classList.add('hide'); downgradeWarn.textContent = '';
+    }
+    noteBox.hidden = !(isDowngrade || isRepackFinal);
+  }
+
+  function renderStageDisabled() {
+    var items = stageList.children;
+    for (var k = 0; k < items.length; k++) {
+      items[k].classList.toggle('disabled', !!(currentAllow && !currentAllow[k]));
+    }
+  }
+
+  function renderDetailBox() {
+    var html;
+    if (!currentMaster) html = 'Chưa có công đoạn cuối trong danh sách chi tiết.';
+    else {
+      html = 'Công đoạn cuối: <b>' + (currentMaster.congDoanCuoi ? esc(currentMaster.congDoanCuoi) : '<span style="color:var(--warn)">chưa có — bấm Sửa ở mục 3 để bổ sung</span>') + '</b>';
+      var fc = finishColorFor(currentMaster.commodity);
+      if (fc) {
+        html += ' &nbsp;·&nbsp; Màu sơn: <span class="paintSwatch" style="background:' + esc(colorHint(fc)) + '"></span><b>' + esc(fc) + '</b> <span style="color:var(--mute)">(theo Commodity: ' + esc(currentMaster.commodity) + ')</span>';
+      }
+      if (currentMaster.autoAdded) {
+        html += '<span class="lastTouch" style="color:var(--warn)">⚠ Dòng này vừa được tự thêm vào Danh sách chi tiết, còn thiếu thông tin — vào mục "3. Danh sách chi tiết" để bổ sung.</span>';
+      }
+    }
+    var touch = lastTouch(currentCode);
+    var rec = DB[currentCode];
+    var n = (rec && typeof rec.serverTouch === 'number') ? rec.serverTouch : touchCount(currentCode);
+    if (touch) {
+      html += '<span class="lastTouch">Lần tác động gần nhất: ' + esc(touch.action) + (touch.stage ? ' (' + esc(touch.stage) + ')' : '') + ' — ' + touch.time.toLocaleString('vi-VN') + ' &nbsp;·&nbsp; Số lần tác động: ' + n + '</span>';
+    } else if (rec && rec.updatedAt) {
+      html += '<span class="lastTouch">Theo Google Sheet — cập nhật lần cuối: ' + rec.updatedAt.toLocaleString('vi-VN') + ' &nbsp;·&nbsp; Số lần tác động: ' + n + '</span>';
+    } else {
+      html += '<span class="lastTouch">Chưa có lần tác động nào trước đây với mã này.</span>';
+    }
+    detailBox.innerHTML = html;
+  }
+  function colorHint(name) {
+    // Chỉ để hiện ô màu minh họa trong bản thử — thực tế có thể lưu sẵn mã màu (hex) trong DanhSachChiTiet.
+    var s = name.toLowerCase();
+    if (s.indexOf('xanh') >= 0 || s.indexOf('green') >= 0) return '#2f6f3e';
+    if (s.indexOf('đỏ') >= 0 || s.indexOf('red') >= 0 || s.indexOf('flame') >= 0) return '#b4231c';
+    if (s.indexOf('vàng') >= 0 || s.indexOf('yellow') >= 0) return '#d8a400';
+    if (s.indexOf('trắng') >= 0 || s.indexOf('white') >= 0) return '#f1f1f1';
+    if (s.indexOf('đen') >= 0 || s.indexOf('black') >= 0) return '#222';
+    if (s.indexOf('xám') >= 0 || s.indexOf('ghi') >= 0 || s.indexOf('grey') >= 0 || s.indexOf('gray') >= 0) return '#8a8f94';
+    if (s.indexOf('blue') >= 0) return '#2b5fa8';
+    if (s.indexOf('brown') >= 0) return '#6b4a2f';
+    if (s.indexOf('violet') >= 0 || s.indexOf('tím') >= 0) return '#6b3fa0';
+    return '#9aa6b2';
+  }
+
+  function loadCode(raw, fromLiveTyping) {
+    if (!fromLiveTyping) codeInput.value = raw;
+    btnClear.classList.toggle('show', !!codeInput.value);
+    var p = parseCode(raw);
+    renderParsed(p);
+    if (!p.ok) { stageCard.hidden = true; currentCode = null; return; }
+    currentCode = p.code; currentParsed = p;
+    var firstTimeThisRaw = (raw !== lastLoadedRaw);
+    if (firstTimeThisRaw) lastLoadedRaw = raw;
+
+    function afterLookup(isNewMaster, connErr) {
+      currentMaster = MASTER_LIST[p.code];
+      if (connErr) {
+        notFoundWarn.textContent = '⚠ Không kết nối được Google Sheet (' + connErr + ') — đang dùng dữ liệu tạm trên trình duyệt. Kiểm tra lại Web app URL ở mục "Kết nối Google Sheet".';
+        currentAllow = currentMaster.congDoanCuoi ? allowedSet(currentMaster.congDoanCuoi) : null;
+      } else if (isNewMaster) {
+        notFoundWarn.textContent = '⚠ Mã chi tiết này chưa có trong Danh sách chi tiết — đã TỰ THÊM một dòng mới (xem mục "3. Danh sách chi tiết", dòng tô vàng) để bổ sung thông tin. Vì chưa biết Công đoạn cuối nên tạm cho chọn mọi công đoạn.';
+        currentAllow = null;
+      } else if (!currentMaster.congDoanCuoi) {
+        notFoundWarn.textContent = '⚠ Mã này có trong danh sách nhưng còn thiếu Công đoạn cuối — tạm cho chọn mọi công đoạn, hãy bổ sung ở mục "3. Danh sách chi tiết".';
+        currentAllow = null;
+      } else {
+        notFoundWarn.textContent = '';
+        currentAllow = allowedSet(currentMaster.congDoanCuoi);
+      }
+      renderDetailBox();
+      renderStageDisabled();
+      var rec = DB[p.code];
+      existingStage = rec ? rec.stage : -1;
+      stageCard.hidden = false;
+      saveMsg.textContent = ''; saveMsg.className = 'msg';
+      palletInput.value = '';
+      noteInput.value = '';
+      var startAt = existingStage >= 0 ? existingStage : 0;
+      selectStage(startAt);
+      if (!fromLiveTyping) stageCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      // Ghi local vào mục "5. Xem trước lịch sử" cho tiện xem ngay trong buổi làm hiện tại — khi đã
+      // nối Google Sheet thì bản ghi thật/đầy đủ nằm ở sheet LichSuCapNhat (server đã tự ghi rồi).
+      if (firstTimeThisRaw) {
+        logAction(currentCode, 'Tra cứu', (rec ? STAGES[rec.stage] : 'Chưa bắt đầu'), '',
+          isNewMaster ? 'Mã chưa có trong Danh sách chi tiết — đã tự thêm dòng mới, cần bổ sung thông tin' : '');
+      }
+    }
+
+    if (WEBAPP_URL) {
+      remoteCall('traCuu', { code: p.code, dwg: p.dwg, sp: p.sp }).then(function (resp) {
+        if (!resp.ok) throw new Error(resp.error || 'Lỗi không rõ từ Google Sheet');
+        applyServerInfo(p.code, resp.data);
+        afterLookup(!!resp.autoAdded, null);
+      }).catch(function (err) {
+        ensureLocalMaster(p);
+        afterLookup(false, err.message || String(err));
+      });
+    } else {
+      var isNewMaster = !MASTER_LIST[p.code];
+      ensureLocalMaster(p);
+      afterLookup(isNewMaster, null);
+    }
+  }
+
+  document.getElementById('btnLoad').onclick = function () { loadCode(codeInput.value); };
+  document.getElementById('btnCancel').onclick = function () { stageCard.hidden = true; currentCode = null; };
+
+  var webAppUrlInput = document.getElementById('webAppUrlInput');
+  var urlMsg = document.getElementById('urlMsg');
+  webAppUrlInput.value = WEBAPP_URL;
+  document.getElementById('btnSaveUrl').onclick = function () {
+    WEBAPP_URL = webAppUrlInput.value.trim();
+    try { localStorage.setItem('pipeSpoolWebAppUrl', WEBAPP_URL); } catch (e) {}
+    if (WEBAPP_URL) { urlMsg.textContent = '✔ Đã lưu — app sẽ đọc/ghi trực tiếp vào Google Sheet.'; urlMsg.className = 'msg ok'; }
+    else { urlMsg.textContent = 'Đã xóa — app chạy chế độ thử (lưu tạm trên trình duyệt).'; urlMsg.className = 'msg'; }
+  };
+
+  document.getElementById('btnConfirm').onclick = function () {
+    if (!currentCode || selectedStage < 0) return;
+    var prevRec = DB[currentCode] || null;
+    var prevPallet = prevRec ? prevRec.pallet : '';
+    var isDowngrade = existingStage >= 0 && selectedStage < existingStage;
+    var pallet = prevPallet || '';
+    if (selectedStage === FINAL_I) {
+      pallet = palletInput.value.trim();
+      if (!pallet) { saveMsg.textContent = '⚠ Cần nhập Số Pallet trước khi xác nhận Đóng kiện.'; saveMsg.className = 'msg err'; palletInput.focus(); return; }
+    }
+    var isPalletChange = selectedStage === FINAL_I && existingStage === FINAL_I && prevPallet && pallet !== prevPallet;
+    var note = noteInput.value.trim();
+    if ((isDowngrade || isPalletChange) && !note) {
+      saveMsg.textContent = '⚠ Trường hợp này cần nhập Ghi chú lý do thay đổi trước khi xác nhận (để lưu vào lịch sử).';
+      saveMsg.className = 'msg err';
+      noteInput.focus();
+      return;
+    }
+    var actionType = isDowngrade ? 'Hạ công đoạn (sửa lỗi)' : (isPalletChange ? 'Đổi Pallet' : (selectedStage === FINAL_I ? 'Đóng kiện' : 'Cập nhật công đoạn'));
+    var stageNote = isPalletChange ? (STAGES[selectedStage] + ' (Pallet cũ: ' + prevPallet + ')') : STAGES[selectedStage];
+
+    function afterSave() {
+      logAction(currentCode, actionType, stageNote, pallet, note);
+      existingStage = selectedStage;
+      noteInput.value = '';
+      selectStage(selectedStage); // làm mới trạng thái cảnh báo hạ công đoạn/đổi pallet sau khi đã lưu
+      renderDetailBox();
+      renderPreview();
+    }
+
+    if (WEBAPP_URL) {
+      saveMsg.textContent = 'Đang lưu lên Google Sheet…'; saveMsg.className = 'msg';
+      remoteCall('capNhat', {
+        code: currentCode, dwg: currentParsed.dwg, sp: currentParsed.sp,
+        stageIndex: selectedStage, pallet: pallet, note: note
+      }).then(function (resp) {
+        if (!resp.ok) { saveMsg.textContent = '⚠ ' + (resp.error || 'Lỗi không lưu được.'); saveMsg.className = 'msg err'; return; }
+        applyServerInfo(currentCode, resp.data);
+        saveMsg.textContent = '✔ Đã lưu lên Google Sheet (sheet TrangThaiSanPham + LichSuCapNhat).';
+        saveMsg.className = 'msg ok';
+        afterSave();
+      }).catch(function (err) {
+        saveMsg.textContent = '⚠ Không kết nối được Google Sheet (' + (err.message || err) + ') — chưa lưu được, thử lại.';
+        saveMsg.className = 'msg err';
+      });
+    } else {
+      DB[currentCode] = { dwg: currentParsed.dwg, sp: currentParsed.sp, stage: selectedStage, pallet: pallet, note: note, updatedAt: new Date() };
+      saveMsg.textContent = '✔ Đã lưu (tạm, trên trình duyệt) — chưa nối Google Sheet.';
+      saveMsg.className = 'msg ok';
+      afterSave();
+    }
+  };
+
+  function renderPreview() {
+    var keys = Object.keys(DB);
+    var wrap = document.getElementById('previewWrap');
+    if (!keys.length) { wrap.innerHTML = '<div class="empty">Chưa có dữ liệu — hãy nhập 1 mã và xác nhận công đoạn ở trên để xem thử.</div>'; return; }
+    keys.sort();
+    var html = '<table><tr><th>Mã chi tiết</th><th>DWG No</th><th>SP</th><th>Finish Color</th><th>Công đoạn hiện tại</th><th>Tiến độ</th><th>Pallet</th><th>Số lần tác động</th><th>Cập nhật</th></tr>';
+    keys.forEach(function (k) {
+      var r = DB[k];
+      var m = MASTER_LIST[k];
+      var fc = m ? finishColorFor(m.commodity) : '';
+      html += '<tr><td>' + esc(k) + '</td><td>' + esc(r.dwg) + '</td><td>' + esc(r.sp || '—') + '</td>' +
+        '<td>' + (fc ? '<span class="paintSwatch" style="background:' + esc(colorHint(fc)) + '"></span>' + esc(fc) : '—') + '</td>' +
+        '<td><span class="chip">' + esc(STAGES[r.stage]) + '</span></td>' +
+        '<td>' + (r.stage + 1) + '/' + STAGES.length + '</td>' +
+        '<td>' + esc(r.pallet || '—') + '</td>' +
+        '<td>' + touchCount(k) + '</td>' +
+        '<td>' + r.updatedAt.toLocaleString('vi-VN') + '</td></tr>';
+    });
+    html += '</table>';
+    wrap.innerHTML = html;
+  }
+
+  /* ---- 3. Bảng Danh sách chi tiết (DanhSachChiTiet) — liệt kê + bôi màu dòng thiếu thông tin ---- */
+  function renderMasterTable() {
+    var wrap = document.getElementById('masterTableWrap');
+    var keys = Object.keys(MASTER_LIST).sort();
+    if (!keys.length) { wrap.innerHTML = '<div class="empty">Chưa có chi tiết nào.</div>'; return; }
+    var html = '<table><tr><th>STT</th><th>Mã chi tiết</th><th>Drawing No.</th><th>Spool No</th><th>Qty</th><th>Weight (kgs)</th><th>Description</th>' +
+      '<th>Type material</th><th>Paint Type</th><th>Finish Color</th><th>Paint System</th>' +
+      '<th>Ngày giao hàng</th><th>Note</th><th>Công đoạn cuối</th><th>Trạng thái</th><th></th></tr>';
+    keys.forEach(function (k, idx) {
+      var e = MASTER_LIST[k];
+      var incomplete = isIncomplete(e);
+      var fc = finishColorFor(e.commodity);
+      html += '<tr' + (incomplete ? ' class="incomplete"' : '') + '>' +
+        '<td>' + (idx + 1) + '</td>' +
+        '<td>' + esc(k) + '</td>' +
+        '<td>' + esc(e.dwg || '—') + '</td>' +
+        '<td>' + esc(e.sp || '—') + '</td>' +
+        '<td>' + esc(e.qty || '—') + '</td>' +
+        '<td>' + esc(e.weight || '—') + '</td>' +
+        '<td>' + esc(e.description || '—') + '</td>' +
+        '<td>' + esc(e.typeMaterial || '—') + '</td>' +
+        '<td>' + esc(e.paintType || '—') + '</td>' +
+        '<td>' + (fc ? '<span class="paintSwatch" style="background:' + esc(colorHint(fc)) + '"></span>' + esc(fc) + ' <span style="color:var(--mute)">(' + esc(e.commodity) + ')</span>' : (e.commodity ? esc(e.commodity) : '—')) + '</td>' +
+        '<td>' + esc(e.paintSystem || '—') + '</td>' +
+        '<td>' + esc(e.ngayGiaoHang || '—') + '</td>' +
+        '<td>' + esc(e.note || '—') + '</td>' +
+        '<td>' + esc(e.congDoanCuoi || '—') + '</td>' +
+        '<td>' + (incomplete ? '<span class="rowTag bad">Cần bổ sung</span>' : '<span class="rowTag ok">Đầy đủ</span>') + '</td>' +
+        '<td><button class="linkBtn" data-edit="' + esc(k) + '">Sửa</button></td>' +
+        '</tr>';
+    });
+    html += '</table>';
+    wrap.innerHTML = html;
+    wrap.querySelectorAll('[data-edit]').forEach(function (btn) {
+      btn.onclick = function () { openEditModal(btn.getAttribute('data-edit')); };
+    });
+  }
+
+  var editOverlay = document.getElementById('editOverlay');
+  var editingCode = null;
+  var edCommodity = document.getElementById('edCommodity');
+  var edCongDoanCuoi = document.getElementById('edCongDoanCuoi');
+  BANG_MAU_SON.forEach(function (r) {
+    var opt = document.createElement('option'); opt.value = r.code; opt.textContent = r.code + ' — ' + r.color; edCommodity.appendChild(opt);
+  });
+  STAGES.forEach(function (s) {
+    var opt = document.createElement('option'); opt.value = s; opt.textContent = s; edCongDoanCuoi.appendChild(opt);
+  });
+
+  function openEditModal(code) {
+    var e = MASTER_LIST[code];
+    if (!e) return;
+    editingCode = code;
+    document.getElementById('editTitle').textContent = 'Bổ sung thông tin — ' + code;
+    document.getElementById('edDwg').value = e.dwg || '';
+    document.getElementById('edSp').value = e.sp || '';
+    document.getElementById('edQty').value = e.qty || '';
+    document.getElementById('edWeight').value = e.weight || '';
+    document.getElementById('edDesc').value = e.description || '';
+    document.getElementById('edMat').value = e.typeMaterial || '';
+    document.getElementById('edPtype').value = e.paintType || '';
+    edCommodity.value = e.commodity || '';
+    document.getElementById('edPsys').value = e.paintSystem || '';
+    document.getElementById('edDate').value = e.ngayGiaoHang || '';
+    edCongDoanCuoi.value = e.congDoanCuoi || '';
+    document.getElementById('edNote').value = (e.autoAdded && e.note && e.note.indexOf('Tự thêm') >= 0) ? '' : (e.note || '');
+    editOverlay.classList.add('show');
+  }
+  function closeEditModal() { editOverlay.classList.remove('show'); editingCode = null; }
+  document.getElementById('closeEdit').onclick = closeEditModal;
+  document.getElementById('btnCancelEdit').onclick = closeEditModal;
+  editOverlay.addEventListener('click', function (e) { if (e.target === editOverlay) closeEditModal(); });
+
+  document.getElementById('btnSaveEdit').onclick = function () {
+    if (!editingCode) return;
+    var e = MASTER_LIST[editingCode];
+    e.qty = document.getElementById('edQty').value.trim();
+    e.weight = document.getElementById('edWeight').value.trim();
+    e.description = document.getElementById('edDesc').value.trim();
+    e.typeMaterial = document.getElementById('edMat').value.trim();
+    e.paintType = document.getElementById('edPtype').value.trim();
+    e.commodity = edCommodity.value;
+    e.paintSystem = document.getElementById('edPsys').value.trim();
+    e.ngayGiaoHang = document.getElementById('edDate').value.trim();
+    e.congDoanCuoi = edCongDoanCuoi.value;
+    e.note = document.getElementById('edNote').value.trim();
+    if (!isIncomplete(e)) e.autoAdded = false; // đã đủ thông tin -> hết tô màu, coi như dòng bình thường
+    renderMasterTable();
+    closeEditModal();
+    // Nếu đang xem đúng mã này ở mục 2, làm mới công đoạn được phép chọn theo Công đoạn cuối mới.
+    if (currentCode === editingCode) {
+      currentMaster = e;
+      currentAllow = e.congDoanCuoi ? allowedSet(e.congDoanCuoi) : null;
+      renderDetailBox();
+      renderStageDisabled();
+      selectStage(selectedStage >= 0 ? selectedStage : 0);
+    }
+  };
+  renderMasterTable();
+
+  /* ---- Bảng mã màu sơn (modal tra nhanh) ---- */
+  var paintOverlay = document.getElementById('paintOverlay');
+  function renderPaintTable() {
+    var html = '<table><tr><th>Mã lưu chất</th><th>Màu sơn</th><th>Ghi chú</th></tr>';
+    BANG_MAU_SON.forEach(function (r) {
+      html += '<tr><td><span class="paintSwatch" style="background:' + esc(colorHint(r.color)) + '"></span>' + esc(r.code) + '</td><td>' + esc(r.color) + '</td><td>' + esc(r.note) + '</td></tr>';
+    });
+    html += '</table>';
+    document.getElementById('paintTableWrap').innerHTML = html;
+  }
+  renderPaintTable();
+  document.getElementById('btnPaintTable').onclick = function () { paintOverlay.classList.add('show'); };
+  document.getElementById('closePaintTable').onclick = function () { paintOverlay.classList.remove('show'); };
+  paintOverlay.addEventListener('click', function (e) { if (e.target === paintOverlay) paintOverlay.classList.remove('show'); });
+
+  document.querySelectorAll('[data-demo]').forEach(function (btn) {
+    btn.onclick = function () { loadCode(btn.getAttribute('data-demo')); };
+  });
+
+  /* ---- Camera quét QR (giống trang Pipe Support, chỉ để thử giao diện) ---- */
+  var video = document.getElementById('video'), camBox = document.getElementById('camBox'), camMsg = document.getElementById('camMsg');
+  var canvas = document.createElement('canvas'), ctx = canvas.getContext('2d', { willReadFrequently: true });
+  var stream = null, camOn = false;
+
+  function tick() {
+    if (!stream || !camOn) return;
+    try {
+      if (video.readyState >= 2 && video.videoWidth && typeof jsQR === 'function') {
+        var vw = video.videoWidth, vh = video.videoHeight, side = Math.min(vw, vh);
+        var offX = (vw - side) / 2, offY = (vh - side) / 2, pad = side * 0.16;
+        var OUT = 700;
+        canvas.width = OUT; canvas.height = OUT;
+        ctx.drawImage(video, offX + pad, offY + pad, side - pad * 2, side - pad * 2, 0, 0, OUT, OUT);
+        var img = ctx.getImageData(0, 0, OUT, OUT);
+        var code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'attemptBoth' });
+        if (code && code.data) { stopCam(); loadCode(code.data); }
+      }
+    } catch (e) {}
+    if (camOn) requestAnimationFrame(tick);
+  }
+  function stopCam() {
+    camOn = false;
+    if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
+    camBox.classList.remove('show');
+    document.getElementById('btnCam').textContent = '🎥 Quét QR bằng camera';
+  }
+  document.getElementById('btnCam').onclick = function () {
+    if (camOn) { stopCam(); return; }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { camMsg.textContent = 'Trình duyệt này không hỗ trợ camera trực tiếp — dùng ô nhập tay ở trên.'; camMsg.className = 'msg err'; return; }
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 1280 } }, audio: false })
+      .then(function (s) {
+        stream = s; video.srcObject = s; video.play(); camOn = true;
+        camBox.classList.add('show');
+        document.getElementById('btnCam').textContent = 'Dừng camera';
+        camMsg.textContent = 'Đưa mã QR vào khung để quét.'; camMsg.className = 'msg';
+        requestAnimationFrame(tick);
+      })
+      .catch(function () { camMsg.textContent = 'Không bật được camera (chưa cấp quyền hoặc trình duyệt chặn).'; camMsg.className = 'msg err'; });
+  };
+})();
+</script>
+</body>
+</html>
