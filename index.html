@@ -26,8 +26,10 @@
   :root { --bg:#f4f6f8; --card:#fff; --ink:#1b2733; --mute:#5c6b7a; --pri:#1f6feb; --ok:#1a7f37; --warn:#b54708; --line:#d8dee4; --done:#e7f3ea; }
   * { box-sizing:border-box; }
   body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--ink); }
-  header { padding:14px 16px; background:#1f4e78; color:#fff; font-weight:600; font-size:18px; }
+  header { position:relative; padding:14px 16px; background:#1f4e78; color:#fff; font-weight:600; font-size:18px; }
   header small { display:block; font-weight:400; font-size:12px; opacity:.85; margin-top:2px; }
+  #btnGearConn { position:absolute; right:14px; top:50%; transform:translateY(-50%); width:34px; height:34px; border-radius:50%; background:rgba(255,255,255,.15); color:#fff; border:0; font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  #btnGearConn:hover { background:rgba(255,255,255,.28); }
   main { padding:12px 16px 40px; max-width:620px; margin:0 auto; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:14px; }
   .card h3 { margin:0 0 10px; font-size:15px; color:var(--mute); font-weight:600; }
@@ -112,17 +114,11 @@
 <header>
   Theo dõi tiến độ Pipe Spool
   <small>Bản thử giao diện — dữ liệu chỉ lưu tạm trên trình duyệt, chưa nối Google Sheet</small>
+  <button id="btnGearConn" title="Kết nối Google Sheet">⚙️</button>
 </header>
 <main>
  
-  <div class="card" id="connCardCollapsed" hidden>
-    <div class="row" style="align-items:center">
-      <div style="font-size:13px;"><span class="rowTag ok">✔ Đã kết nối Google Sheet</span></div>
-      <button class="btn-sec btn-sm" id="btnExpandConn" style="flex:none">Đổi URL</button>
-    </div>
-  </div>
- 
-  <div class="card" id="connCardExpanded">
+  <div class="card" id="connCardExpanded" hidden>
     <h3>⚙️ Kết nối Google Sheet</h3>
     <div style="font-size:12.5px; color:var(--mute); margin-bottom:6px;">Dán "Web app URL" đã deploy từ Google Apps Script (xem hướng dẫn trong file Code_PipeSpool.gs) để app đọc/ghi trực tiếp vào các sheet DanhSachChiTiet/TrangThaiSanPham/LichSuCapNhat trên Google Sheet. Để trống thì app chạy ở chế độ thử (lưu tạm trên trình duyệt, mất khi tắt trang).</div>
     <div class="row">
@@ -650,25 +646,22 @@
  
   var webAppUrlInput = document.getElementById('webAppUrlInput');
   var urlMsg = document.getElementById('urlMsg');
-  var connCardCollapsed = document.getElementById('connCardCollapsed');
   var connCardExpanded = document.getElementById('connCardExpanded');
+  var btnGearConn = document.getElementById('btnGearConn');
   webAppUrlInput.value = WEBAPP_URL;
  
-  function showConnCollapsed(collapse) {
-    connCardCollapsed.hidden = !collapse;
-    connCardExpanded.hidden = collapse;
-  }
-  // Đã có URL lưu sẵn từ lần trước (localStorage) -> thu gọn ngay khi mở trang, đỡ chiếm chỗ.
-  showConnCollapsed(!!WEBAPP_URL);
+  // Chưa từng lưu URL (lần đầu mở trang) -> tự mở khung kết nối ra để người dùng thiết lập.
+  // Đã lưu rồi -> ẩn hẳn, chỉ còn nút ⚙️ ở góc header để mở lại khi cần đổi URL.
+  connCardExpanded.hidden = !!WEBAPP_URL;
  
-  document.getElementById('btnExpandConn').onclick = function () { showConnCollapsed(false); };
+  btnGearConn.onclick = function () { connCardExpanded.hidden = !connCardExpanded.hidden; };
  
   document.getElementById('btnSaveUrl').onclick = function () {
     WEBAPP_URL = webAppUrlInput.value.trim();
     try { localStorage.setItem('pipeSpoolWebAppUrl', WEBAPP_URL); } catch (e) {}
     if (WEBAPP_URL) {
       urlMsg.textContent = '✔ Đã lưu — app sẽ đọc/ghi trực tiếp vào Google Sheet.'; urlMsg.className = 'msg ok';
-      setTimeout(function () { showConnCollapsed(true); }, 1000);
+      setTimeout(function () { connCardExpanded.hidden = true; }, 1000);
     } else {
       urlMsg.textContent = 'Đã xóa — app chạy chế độ thử (lưu tạm trên trình duyệt).'; urlMsg.className = 'msg';
     }
