@@ -589,7 +589,7 @@
     }
   }
  
-  var WELD_NAME = { S:'hàn xưởng', F:'mối đính (hàn công trường)', K:'mối đính xưởng, hàn hoàn thiện tại công trường', T:'mối ren', B:'mối bu lông' };
+  var WELD_NAME = { S:'hàn xưởng', F:'mối hàn công trường', K:'mối đính (đính xưởng, hàn tại công trường)', T:'mối ren', B:'mối bu lông' };
   function weldsHtml(w) {
     var a = String(w || '').split(',').filter(Boolean), cnt = {}, chips = '';
     if (!a.length) return '<span class="lastTouch" style="color:var(--ink)">Mối hàn: <b>không có mối hàn trên bản vẽ spool này</b></span>';
@@ -597,7 +597,7 @@
       chips += '<span class="wd ' + t + '" title="' + esc(WELD_NAME[t] || t) + '">' + esc(n) + '</span>'; });
     var sum = ['S', 'F', 'K', 'T', 'B'].filter(function (t) { return cnt[t]; }).map(function (t) { return cnt[t] + ' ' + WELD_NAME[t]; }).join(' · ');
     return '<span class="lastTouch" style="color:var(--ink)">Mối hàn (' + a.length + '): <b>' + esc(sum) + '</b></span><span class="lastTouch">' + chips +
-      '<span style="display:block;color:var(--mute);font-size:12px;margin-top:2px">Tròn = hàn xưởng · Lục giác = mối đính (công trường) · Lục giác gạch chân = đính xưởng, hàn hoàn thiện tại công trường · Oval nét đứt = ren · Thoi = bu lông</span></span>';
+      '<span style="display:block;color:var(--mute);font-size:12px;margin-top:2px">Tròn = hàn xưởng · Lục giác = hàn công trường · Lục giác gạch chân (Tack) = mối đính: đính ở xưởng, hàn tại công trường · Oval nét đứt = ren · Thoi = bu lông</span></span>';
   }
   function renderDetailBox() {
     var html;
