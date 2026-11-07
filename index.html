@@ -51,6 +51,12 @@
   .parsed b { color:var(--ink); }
   .detailBox { background:#eef3f8; border-radius:8px; padding:10px 12px; font-size:14px; margin-bottom:10px; }
   .detailBox b { color:var(--pri); }
+  .wd { display:inline-block; min-width:38px; text-align:center; margin:3px 5px 3px 0; padding:3px 9px; font:700 12.5px var(--mono,monospace); border:1.5px solid #5b6b7a; background:#fff; color:#1f2d3a; }
+  .wd.S { border-radius:999px; }
+  .wd.F { background:#ffe9b8; border-color:#b7791f; color:#6b4300; clip-path:polygon(12% 0,88% 0,100% 50%,88% 100%,12% 100%,0 50%); border:0; padding:4px 14px; }
+  .wd.K { background:#ffd27a; border-color:#b7791f; color:#6b4300; clip-path:polygon(12% 0,88% 0,100% 50%,88% 100%,12% 100%,0 50%); border:0; padding:4px 14px; text-decoration:underline; }
+  .wd.T { border-radius:50%/60%; border-style:dashed; }
+  .wd.B { background:#e6eef7; clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%); border:0; padding:5px 16px; }
   .paintSwatch { display:inline-block; width:14px; height:14px; border-radius:3px; border:1px solid rgba(0,0,0,.35); vertical-align:-2px; margin-right:6px; }
   .paintSwatch.none { background:repeating-linear-gradient(45deg,#fff 0 3px,#d5dbe1 3px 6px); }
   .paintBig { display:inline-block; width:34px; height:22px; border-radius:4px; border:1px solid rgba(0,0,0,.35); vertical-align:middle; }
@@ -393,6 +399,7 @@
         note: 'Tự thêm khi quét lần đầu (tạm, chưa nối Google Sheet) — cần bổ sung thông tin',
         congDoanCuoi: '', autoAdded: true
       };
+      autoFinalStage(MASTER_LIST[p.code]);
       renderMasterTable();
     }
   }
@@ -473,7 +480,7 @@
   function catKey(c) { return String(c).replace(/[-_\s]/g, '').replace(/SP/ig, '').toUpperCase(); }
   function catInfo(code) {
     var r = CAT && CAT.items[code];
-    return r ? { goi: CAT.pkgs[r[0]], trang: r[1], mota: r[2], vatlieu: r[3], commodity: r[4] } : null;
+    return r ? { goi: CAT.pkgs[r[0]], trang: r[1], mota: r[2], vatlieu: r[3], commodity: r[4], welds: r[5] || '' } : null;
   }
   try {
     fetch('spools.json').then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (j) {
@@ -582,6 +589,16 @@
     }
   }
  
+  var WELD_NAME = { S:'hàn xưởng', F:'mối đính (hàn công trường)', K:'mối đính xưởng, hàn hoàn thiện tại công trường', T:'mối ren', B:'mối bu lông' };
+  function weldsHtml(w) {
+    var a = String(w || '').split(',').filter(Boolean), cnt = {}, chips = '';
+    if (!a.length) return '<span class="lastTouch" style="color:var(--ink)">Mối hàn: <b>không có mối hàn trên bản vẽ spool này</b></span>';
+    a.forEach(function (x) { var t = x.slice(-1), n = x.slice(0, -1); cnt[t] = (cnt[t] || 0) + 1;
+      chips += '<span class="wd ' + t + '" title="' + esc(WELD_NAME[t] || t) + '">' + esc(n) + '</span>'; });
+    var sum = ['S', 'F', 'K', 'T', 'B'].filter(function (t) { return cnt[t]; }).map(function (t) { return cnt[t] + ' ' + WELD_NAME[t]; }).join(' · ');
+    return '<span class="lastTouch" style="color:var(--ink)">Mối hàn (' + a.length + '): <b>' + esc(sum) + '</b></span><span class="lastTouch">' + chips +
+      '<span style="display:block;color:var(--mute);font-size:12px;margin-top:2px">Tròn = hàn xưởng · Lục giác = mối đính (công trường) · Lục giác gạch chân = đính xưởng, hàn hoàn thiện tại công trường · Oval nét đứt = ren · Thoi = bu lông</span></span>';
+  }
   function renderDetailBox() {
     var html;
     if (!currentMaster) html = 'Chưa có công đoạn cuối trong danh sách chi tiết.';
@@ -600,7 +617,7 @@
     if (ci) {
       html += '<span class="lastTouch" style="color:var(--ink)">Thuộc gói: <b>' + esc(ci.goi) + '</b> &nbsp;·&nbsp; Trang PDF: <b>' + esc(ci.trang) + '</b>' +
         (ci.vatlieu ? ' &nbsp;·&nbsp; Vật liệu ống: <b>' + esc(ci.vatlieu) + '</b>' : '') + '</span>' +
-        '<span class="lastTouch" style="color:var(--ink)">Mô tả: ' + esc(ci.mota) + '</span>';
+        '<span class="lastTouch" style="color:var(--ink)">Mô tả: ' + esc(ci.mota) + '</span>' + weldsHtml(ci.welds);
     } else if (CAT) {
       html += '<span class="lastTouch">Mã này chưa có trong danh mục bản vẽ (spools.json) — chưa biết thuộc gói nào.</span>';
     }
