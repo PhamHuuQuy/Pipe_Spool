@@ -321,8 +321,11 @@
      Dùng fetch GET (không dùng POST) để tránh vướng CORS preflight với Apps Script.
      Khi WEBAPP_URL rỗng, app chạy ở chế độ thử — mọi dữ liệu chỉ lưu tạm trong MASTER_LIST/DB/LOG
      ở trên, mất khi tắt trang (giữ nguyên hành vi bản thử trước đây). */
-  var WEBAPP_URL = '';
-  try { WEBAPP_URL = localStorage.getItem('pipeSpoolWebAppUrl') || ''; } catch (e) {}
+  // URL cố định của Web app (dán đường dẫn kết thúc bằng /exec vào giữa hai dấu nháy). Khi đã điền, app luôn
+  // dùng URL này, tự ẩn nút ⚙️ và khung kết nối, người dùng khác mở link app không phải nhập gì thêm.
+  var DEFAULT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxvxiJmM1xtTp1ydLQCNwNo-LRWj3I83Uy0B5_MVnaxlb3k0RrUMe7C_51KVzpw1JK1ug/exec';
+  var WEBAPP_URL = DEFAULT_WEBAPP_URL;
+  if (!WEBAPP_URL) { try { WEBAPP_URL = localStorage.getItem('pipeSpoolWebAppUrl') || ''; } catch (e) {} }
  
   function remoteCall(action, params) {
     var qs = Object.keys(params).map(function (k) {
@@ -686,6 +689,12 @@
   connCardExpanded.hidden = !!WEBAPP_URL;
  
   btnGearConn.onclick = function () { connCardExpanded.hidden = !connCardExpanded.hidden; };
+  if (DEFAULT_WEBAPP_URL) {   // đã cố định URL -> bỏ hẳn phần kết nối khỏi giao diện
+    btnGearConn.style.display = 'none';
+    connCardExpanded.hidden = true; connCardExpanded.style.display = 'none';
+    var sub = document.querySelector('header small');
+    if (sub) sub.textContent = 'Dữ liệu đồng bộ trực tiếp với Google Sheet';
+  }
  
   document.getElementById('btnSaveUrl').onclick = function () {
     WEBAPP_URL = webAppUrlInput.value.trim();
