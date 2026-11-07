@@ -342,6 +342,15 @@
     });
   }
  
+  // Chi tiết đã có mã màu + màu sơn cụ thể (số RAL) mà chưa nhập Công đoạn cuối -> mặc định là "Hoàn thiện sơn".
+  // Giá trị nhập tay ở cột Công đoạn cuối luôn được ưu tiên. D/TRIM chưa có màu cụ thể nên không tự suy ra.
+  function autoFinalStage(m) {
+    if (m && !m.congDoanCuoi && /RAL\s*\d{4}/.test(finishColorFor(m.commodity))) {
+      m.congDoanCuoi = 'Hoàn thiện sơn'; m.congDoanAuto = true;
+    }
+    return m;
+  }
+
   // Khi có dữ liệu từ server, đổ vào MASTER_LIST/DB cục bộ (cùng hình dạng dữ liệu local-only cũ)
   // để toàn bộ phần hiển thị/khóa công đoạn phía dưới (selectStage, renderDetailBox, renderMasterTable...)
   // dùng lại được nguyên vẹn, không cần viết lại 2 lần.
@@ -356,6 +365,7 @@
         congDoanCuoi: info.master.congDoanCuoi || '',
         autoAdded: info.master.trangThaiDuLieu === 'Cần bổ sung'
       };
+      autoFinalStage(MASTER_LIST[code]);
     }
     if (info.status && info.status.marks) {
       var idx = -1;
@@ -576,7 +586,8 @@
     var html;
     if (!currentMaster) html = 'Chưa có công đoạn cuối trong danh sách chi tiết.';
     else {
-      html = 'Công đoạn cuối: <b>' + (currentMaster.congDoanCuoi ? esc(currentMaster.congDoanCuoi) : '<span style="color:var(--warn)">chưa có — bấm Sửa ở mục 3 để bổ sung</span>') + '</b>';
+      html = 'Công đoạn cuối: <b>' + (currentMaster.congDoanCuoi ? esc(currentMaster.congDoanCuoi) : '<span style="color:var(--warn)">chưa có — bấm Sửa ở mục 3 để bổ sung</span>') + '</b>' +
+        (currentMaster.congDoanAuto ? ' <span style="color:var(--mute)">(tự suy ra vì chi tiết có màu sơn)</span>' : '');
       var fc = finishColorFor(currentMaster.commodity);
       if (fc) {
         html += ' &nbsp;·&nbsp; Màu sơn: ' + swatchHtml(fc) + '<b>' + esc(fc) + '</b> <span style="color:var(--mute)">(theo Commodity: ' + esc(currentMaster.commodity) + ')</span>';
@@ -644,8 +655,8 @@
         notFoundWarn.textContent = '⚠ Không kết nối được Google Sheet (' + connErr + ') — đang dùng dữ liệu tạm trên trình duyệt. Kiểm tra lại Web app URL ở mục "Kết nối Google Sheet".';
         currentAllow = currentMaster.congDoanCuoi ? allowedSet(currentMaster.congDoanCuoi) : null;
       } else if (isNewMaster) {
-        notFoundWarn.textContent = '⚠ Mã chi tiết này chưa có trong Danh sách chi tiết — đã TỰ THÊM một dòng mới (xem mục "3. Danh sách chi tiết", dòng tô vàng) để bổ sung thông tin. Vì chưa biết Công đoạn cuối nên tạm cho chọn mọi công đoạn.';
-        currentAllow = null;
+        notFoundWarn.textContent = '⚠ Mã chi tiết này chưa có trong Danh sách chi tiết — đã TỰ THÊM một dòng mới (xem mục "3. Danh sách chi tiết", dòng tô vàng) để bổ sung thông tin.' + (currentMaster.congDoanCuoi ? '' : ' Vì chưa biết Công đoạn cuối nên tạm cho chọn mọi công đoạn.');
+        currentAllow = currentMaster.congDoanCuoi ? allowedSet(currentMaster.congDoanCuoi) : null;
       } else if (!currentMaster.congDoanCuoi) {
         notFoundWarn.textContent = '⚠ Mã này có trong danh sách nhưng còn thiếu Công đoạn cuối — tạm cho chọn mọi công đoạn, hãy bổ sung ở mục "3. Danh sách chi tiết".';
         currentAllow = null;
