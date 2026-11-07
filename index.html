@@ -130,7 +130,7 @@
  
   <div class="card">
     <h3>1. Nhập / quét mã chi tiết</h3>
-    <label for="codeInput">Chỉ cần nhập số và chữ liền nhau theo đúng thứ tự (không cần gõ dấu "-" hay "SP"), hệ thống sẽ tự chèn: 3 số – 2/3 chữ – 5 số – 2 số – rồi tự ghép "-SP" + 2 số cuối</label>
+    <label for="codeInput">Chỉ cần nhập số và chữ liền nhau theo đúng thứ tự (không cần gõ dấu "-" hay "SP"), hệ thống sẽ tự chèn: 3 số – 1/2/3 chữ – 5 số – 2 số – rồi tự ghép "-SP" + 2 số cuối</label>
     <div class="inputWrap">
       <input type="text" id="codeInput" placeholder="VD: 123ABC310010501" autocapitalize="characters">
       <button class="clearBtn" id="btnClear" type="button" title="Xóa nội dung">✕</button>
@@ -178,6 +178,8 @@
     <div style="font-size:12.5px; color:var(--mute); margin-bottom:6px;">Mã nào quét/tra cứu mà chưa có trong danh sách sẽ được <b>tự thêm</b> một dòng mới (tô vàng) để bổ sung sau — bấm "Sửa" để điền, điền xong hết phần cần thiết dòng sẽ tự hết tô màu. Thực tế sẽ liên kết với file Excel checklist trên máy bạn.</div>
     <div class="tableScroll" id="masterTableWrap"></div>
     <div style="margin-top:8px">
+      <button class="btn-sec btn-sm" data-demo="210NG210133201">Thử: mã thật 210-NG-21013-32-SP01 (hiện gói + mô tả)</button>
+      <button class="btn-sec btn-sm" data-demo="210-TRIM-D2101_N4-31-SP01">Thử: mã TRIM</button>
       <button class="btn-sec btn-sm" data-demo="456DEF450060703">Thử: quét mã chưa có trong danh sách (456DEF450060703)</button>
     </div>
   </div>
@@ -367,8 +369,9 @@
   function ensureLocalMaster(p) {
     if (!MASTER_LIST[p.code]) {
       MASTER_LIST[p.code] = {
-        dwg: p.dwg, sp: p.sp, qty: '', weight: '', description: '', typeMaterial: '', paintType: '',
-        commodity: '', paintSystem: '', ngayGiaoHang: '',
+        dwg: p.dwg, sp: p.sp, qty: catInfo(p.code) ? '1' : '', weight: '', description: catInfo(p.code) ? catInfo(p.code).mota : '',
+        typeMaterial: catInfo(p.code) ? catInfo(p.code).vatlieu : '', paintType: '',
+        commodity: catInfo(p.code) ? catInfo(p.code).commodity : '', paintSystem: '', ngayGiaoHang: '',
         note: 'Tự thêm khi quét lần đầu (tạm, chưa nối Google Sheet) — cần bổ sung thông tin',
         congDoanCuoi: '', autoAdded: true
       };
@@ -446,14 +449,34 @@
     wrap.innerHTML = html;
   }
  
+  /* ---- Danh mục chi tiết từ bản vẽ (spools.json): mã -> gói bản vẽ, trang PDF, mô tả tiếng Việt ----
+     Tạo từ 5 gói: ORF-PACKAGE_01/02/03, TLF-PACKAGE_01, JETTY TRESTLE. Chỉ để tra cứu/hiển thị, không ghi đè dữ liệu Google Sheet. */
+  var CAT = null, CAT_IDX = {};
+  function catKey(c) { return String(c).replace(/[-_\s]/g, '').replace(/SP/ig, '').toUpperCase(); }
+  function catInfo(code) {
+    var r = CAT && CAT.items[code];
+    return r ? { goi: CAT.pkgs[r[0]], trang: r[1], mota: r[2], vatlieu: r[3], commodity: r[4] } : null;
+  }
+  try {
+    fetch('spools.json').then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (j) {
+      CAT = j; Object.keys(j.items).forEach(function (k) { CAT_IDX[catKey(k)] = k; });
+      if (codeInput.value) { var p0 = parseCode(codeInput.value); if (p0.ok) loadCode(codeInput.value, true); }
+      renderMasterTable();
+    }).catch(function () {});
+  } catch (e) {}
+
   /* ---- Tách mã chi tiết thô (chỉ số + chữ, không dấu, không "SP") theo bố cục:
      !(3 số) - *(2-3 chữ) - #(5 số) - ?(2 số) - $(2 số, số SP)
      rồi tự chèn dấu "-" giữa các mã nhỏ và chèn "SP" trước $.
      Ví dụ nhập "123ABC310010501" -> DWG No "123-ABC-31001-05", Mã chi tiết "123-ABC-31001-05-SP01". */
-  var RAW_RE = /^(\d{3})([A-Za-z]{2,3})(\d{5})(\d{2})(\d{2})$/;
+  var RAW_RE = /^(\d{3})([A-Za-z]{1,3})(\d{5})(\d{2})(\d{2})$/;
   function parseCode(raw) {
     var clean = String(raw || '').trim().replace(/[-_\s]/g, '').replace(/SP/ig, '').toUpperCase();
     var m = clean.match(RAW_RE);
+    if (!m && CAT_IDX[clean]) {   // mã dạng khác (ví dụ bản vẽ TRIM) -> nhận theo danh mục spools.json
+      var cc = CAT_IDX[clean];
+      return { raw: raw, clean: clean, ok: true, code: cc, dwg: cc.replace(/-SP\d+$/, ''), sp: cc.match(/SP\d+$/)[0] };
+    }
     if (!m) return { raw: raw, clean: clean, ok: false, code: '', dwg: '', sp: '' };
     var dwg = m[1] + '-' + m[2] + '-' + m[3] + '-' + m[4];
     var sp = 'SP' + m[5];
@@ -463,7 +486,7 @@
   function renderParsed(p) {
     if (!p.clean) { parsedInfo.innerHTML = ''; return; }
     if (!p.ok) {
-      parsedInfo.innerHTML = '<span style="color:var(--warn)">Chưa đủ/đúng định dạng (cần đúng: 3 số, 2–3 chữ, 5 số, 2 số, 2 số — liền nhau, không dấu). Đã nhập: ' + esc(p.clean) + '</span>';
+      parsedInfo.innerHTML = '<span style="color:var(--warn)">Chưa đủ/đúng định dạng (cần đúng: 3 số, 1–3 chữ, 5 số, 2 số, 2 số — liền nhau, không dấu; riêng mã TRIM thì gõ đủ, ví dụ 210-TRIM-D2101_N4-31-SP01). Đã nhập: ' + esc(p.clean) + '</span>';
       return;
     }
     parsedInfo.innerHTML = 'Mã chi tiết: <b>' + esc(p.code) + '</b> &nbsp;·&nbsp; DWG No: <b>' + esc(p.dwg) + '</b> &nbsp;·&nbsp; Số SP: <b>' + esc(p.sp) + '</b>';
@@ -553,6 +576,14 @@
       if (currentMaster.autoAdded) {
         html += '<span class="lastTouch" style="color:var(--warn)">⚠ Dòng này vừa được tự thêm vào Danh sách chi tiết, còn thiếu thông tin — vào mục "3. Danh sách chi tiết" để bổ sung.</span>';
       }
+    }
+    var ci = catInfo(currentCode);
+    if (ci) {
+      html += '<span class="lastTouch" style="color:var(--ink)">Thuộc gói: <b>' + esc(ci.goi) + '</b> &nbsp;·&nbsp; Trang PDF: <b>' + esc(ci.trang) + '</b>' +
+        (ci.vatlieu ? ' &nbsp;·&nbsp; Vật liệu ống: <b>' + esc(ci.vatlieu) + '</b>' : '') + '</span>' +
+        '<span class="lastTouch" style="color:var(--ink)">Mô tả: ' + esc(ci.mota) + '</span>';
+    } else if (CAT) {
+      html += '<span class="lastTouch">Mã này chưa có trong danh mục bản vẽ (spools.json) — chưa biết thuộc gói nào.</span>';
     }
     var touch = lastTouch(currentCode);
     var rec = DB[currentCode];
@@ -747,7 +778,7 @@
     var wrap = document.getElementById('masterTableWrap');
     var keys = Object.keys(MASTER_LIST).sort();
     if (!keys.length) { wrap.innerHTML = '<div class="empty">Chưa có chi tiết nào.</div>'; return; }
-    var html = '<table><tr><th>STT</th><th>Mã chi tiết</th><th>Drawing No.</th><th>Spool No</th><th>Qty</th><th>Weight (kgs)</th><th>Description</th>' +
+    var html = '<table><tr><th>STT</th><th>Mã chi tiết</th><th>Drawing No.</th><th>Spool No</th><th>Qty</th><th>Weight (kgs)</th><th>Gói bản vẽ</th><th>Description</th>' +
       '<th>Type material</th><th>Paint Type</th><th>Finish Color</th><th>Paint System</th>' +
       '<th>Ngày giao hàng</th><th>Note</th><th>Công đoạn cuối</th><th>Trạng thái</th><th></th></tr>';
     keys.forEach(function (k, idx) {
@@ -761,8 +792,9 @@
         '<td>' + esc(e.sp || '—') + '</td>' +
         '<td>' + esc(e.qty || '—') + '</td>' +
         '<td>' + esc(e.weight || '—') + '</td>' +
-        '<td>' + esc(e.description || '—') + '</td>' +
-        '<td>' + esc(e.typeMaterial || '—') + '</td>' +
+        '<td>' + (catInfo(k) ? esc(catInfo(k).goi) + ' (tr. ' + esc(catInfo(k).trang) + ')' : '—') + '</td>' +
+        '<td>' + esc(e.description || (catInfo(k) ? catInfo(k).mota : '') || '—') + '</td>' +
+        '<td>' + esc(e.typeMaterial || (catInfo(k) ? catInfo(k).vatlieu : '') || '—') + '</td>' +
         '<td>' + esc(e.paintType || '—') + '</td>' +
         '<td>' + (fc ? '<span class="paintSwatch" style="background:' + esc(colorHint(fc)) + '"></span>' + esc(fc) + ' <span style="color:var(--mute)">(' + esc(e.commodity) + ')</span>' : (e.commodity ? esc(e.commodity) : '—')) + '</td>' +
         '<td>' + esc(e.paintSystem || '—') + '</td>' +
