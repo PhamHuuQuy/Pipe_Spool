@@ -51,7 +51,10 @@
   .parsed b { color:var(--ink); }
   .detailBox { background:#eef3f8; border-radius:8px; padding:10px 12px; font-size:14px; margin-bottom:10px; }
   .detailBox b { color:var(--pri); }
-  .detailBox .paintSwatch { display:inline-block; width:12px; height:12px; border-radius:3px; border:1px solid rgba(0,0,0,.2); vertical-align:-1px; margin-right:4px; }
+  .paintSwatch { display:inline-block; width:14px; height:14px; border-radius:3px; border:1px solid rgba(0,0,0,.35); vertical-align:-2px; margin-right:6px; }
+  .paintSwatch.none { background:repeating-linear-gradient(45deg,#fff 0 3px,#d5dbe1 3px 6px); }
+  .paintBig { display:inline-block; width:34px; height:22px; border-radius:4px; border:1px solid rgba(0,0,0,.35); vertical-align:middle; }
+  .paintBig.none { background:repeating-linear-gradient(45deg,#fff 0 4px,#d5dbe1 4px 8px); }
   .detailBox .lastTouch { display:block; margin-top:4px; color:var(--mute); font-size:12.5px; }
   .palletBox { background:#fff8e6; border:1px solid #f0d9a6; border-radius:8px; padding:10px 12px; margin:10px 0; }
   .palletBox label { color:var(--warn); font-weight:600; }
@@ -91,6 +94,8 @@
   details summary { cursor:pointer; color:var(--mute); font-size:13px; }
   .tableScroll { overflow-x:auto; -webkit-overflow-scrolling:touch; }
   .tableScroll table { white-space:nowrap; }
+  #paintTableWrap table { white-space:normal; }
+  #paintTableWrap th, #paintTableWrap td { padding-left:6px; padding-right:6px; }
   tr.incomplete td { background:#fff6d6; }
   tr.incomplete td:first-child { border-left:3px solid #b88a00; }
   .rowTag { font-size:10.5px; font-weight:700; padding:2px 6px; border-radius:999px; }
@@ -574,7 +579,7 @@
       html = 'Công đoạn cuối: <b>' + (currentMaster.congDoanCuoi ? esc(currentMaster.congDoanCuoi) : '<span style="color:var(--warn)">chưa có — bấm Sửa ở mục 3 để bổ sung</span>') + '</b>';
       var fc = finishColorFor(currentMaster.commodity);
       if (fc) {
-        html += ' &nbsp;·&nbsp; Màu sơn: <span class="paintSwatch" style="background:' + esc(colorHint(fc)) + '"></span><b>' + esc(fc) + '</b> <span style="color:var(--mute)">(theo Commodity: ' + esc(currentMaster.commodity) + ')</span>';
+        html += ' &nbsp;·&nbsp; Màu sơn: ' + swatchHtml(fc) + '<b>' + esc(fc) + '</b> <span style="color:var(--mute)">(theo Commodity: ' + esc(currentMaster.commodity) + ')</span>';
       }
       if (currentMaster.autoAdded) {
         html += '<span class="lastTouch" style="color:var(--warn)">⚠ Dòng này vừa được tự thêm vào Danh sách chi tiết, còn thiếu thông tin — vào mục "3. Danh sách chi tiết" để bổ sung.</span>';
@@ -599,6 +604,14 @@
       html += '<span class="lastTouch">Chưa có lần tác động nào trước đây với mã này.</span>';
     }
     detailBox.innerHTML = html;
+  }
+  // Mã màu hiển thị theo đúng số RAL ghi trong bảng (nếu không có số RAL cụ thể thì trả '' -> ô gạch chéo "chưa xác định màu")
+  var RAL_HEX = { '9016':'#F1F0EA', '5012':'#3481B8', '7038':'#B4B8B0', '6024':'#008351', '4008':'#924E7D', '8002':'#7B5141', '3000':'#AF2B1E' };
+  function ralHex(name) { var m = String(name || '').match(/RAL\s*(\d{4})/); return m && RAL_HEX[m[1]] ? RAL_HEX[m[1]] : ''; }
+  function swatchHtml(name, big) {
+    var h = ralHex(name), c = big ? 'paintBig' : 'paintSwatch';
+    return h ? '<span class="' + c + '" style="background:' + h + '" title="' + esc(name) + '"></span>'
+             : '<span class="' + c + ' none" title="Chưa xác định màu cụ thể"></span>';
   }
   function colorHint(name) {
     // Chỉ để hiện ô màu minh họa trong bản thử — thực tế có thể lưu sẵn mã màu (hex) trong DanhSachChiTiet.
@@ -771,7 +784,7 @@
       var m = MASTER_LIST[k];
       var fc = m ? finishColorFor(m.commodity) : '';
       html += '<tr><td>' + esc(k) + '</td><td>' + esc(r.dwg) + '</td><td>' + esc(r.sp || '—') + '</td>' +
-        '<td>' + (fc ? '<span class="paintSwatch" style="background:' + esc(colorHint(fc)) + '"></span>' + esc(fc) : '—') + '</td>' +
+        '<td>' + (fc ? '' + swatchHtml(fc) + '' + esc(fc) : '—') + '</td>' +
         '<td><span class="chip">' + esc(STAGES[r.stage]) + '</span></td>' +
         '<td>' + (r.stage + 1) + '/' + STAGES.length + '</td>' +
         '<td>' + esc(r.pallet || '—') + '</td>' +
@@ -805,7 +818,7 @@
         '<td>' + esc(e.description || (catInfo(k) ? catInfo(k).mota : '') || '—') + '</td>' +
         '<td>' + esc(e.typeMaterial || (catInfo(k) ? catInfo(k).vatlieu : '') || '—') + '</td>' +
         '<td>' + esc(e.paintType || '—') + '</td>' +
-        '<td>' + (fc ? '<span class="paintSwatch" style="background:' + esc(colorHint(fc)) + '"></span>' + esc(fc) + ' <span style="color:var(--mute)">(' + esc(e.commodity) + ')</span>' : (e.commodity ? esc(e.commodity) : '—')) + '</td>' +
+        '<td>' + (fc ? '' + swatchHtml(fc) + '' + esc(fc) + ' <span style="color:var(--mute)">(' + esc(e.commodity) + ')</span>' : (e.commodity ? esc(e.commodity) : '—')) + '</td>' +
         '<td>' + esc(e.paintSystem || '—') + '</td>' +
         '<td>' + esc(e.ngayGiaoHang || '—') + '</td>' +
         '<td>' + esc(e.note || '—') + '</td>' +
@@ -886,9 +899,9 @@
   /* ---- Bảng mã màu sơn (modal tra nhanh) ---- */
   var paintOverlay = document.getElementById('paintOverlay');
   function renderPaintTable() {
-    var html = '<table><tr><th>Mã lưu chất</th><th>Màu sơn</th><th>Ghi chú</th></tr>';
+    var html = '<table><tr><th>Màu</th><th>Mã lưu chất</th><th>Tên màu</th><th>Ghi chú</th></tr>';
     BANG_MAU_SON.forEach(function (r) {
-      html += '<tr><td><span class="paintSwatch" style="background:' + esc(colorHint(r.color)) + '"></span>' + esc(r.code) + '</td><td>' + esc(r.color) + '</td><td>' + esc(r.note) + '</td></tr>';
+      html += '<tr><td>' + swatchHtml(r.color, true) + '</td><td><b>' + esc(r.code) + '</b></td><td>' + esc(r.color) + '</td><td>' + esc(r.note) + '</td></tr>';
     });
     html += '</table>';
     document.getElementById('paintTableWrap').innerHTML = html;
