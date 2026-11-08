@@ -53,6 +53,7 @@
   .detailBox b { color:var(--pri); }
   .detailBox .lastTouch.wrow { display:flex; flex-wrap:wrap; gap:6px 8px; align-items:flex-start; }
   .wchip { color:var(--ink); } .wsvg { display:block; }
+  .wchip { position:relative; } .wchip.wq svg { color:var(--warn); } .wqm { position:absolute; right:-2px; top:-4px; background:var(--warn); color:#fff; border-radius:50%; width:15px; height:15px; font-size:11px; line-height:15px; text-align:center; }
   .detailBox .wlegs { display:flex; flex-wrap:wrap; gap:8px 14px; margin-top:6px; } .wleg { display:flex; align-items:center; gap:6px; font-size:12px; max-width:260px; color:var(--ink); }
   .paintSwatch { display:inline-block; width:14px; height:14px; border-radius:3px; border:1px solid rgba(0,0,0,.35); vertical-align:-2px; margin-right:6px; }
   .paintSwatch.none { background:repeating-linear-gradient(45deg,#fff 0 3px,#d5dbe1 3px 6px); }
@@ -477,7 +478,7 @@
   function catKey(c) { return String(c).replace(/[-_\s]/g, '').replace(/SP/ig, '').toUpperCase(); }
   function catInfo(code) {
     var r = CAT && CAT.items[code];
-    return r ? { goi: CAT.pkgs[r[0]], trang: r[1], mota: r[2], vatlieu: r[3], commodity: r[4], welds: r[5] || '' } : null;
+    return r ? { goi: CAT.pkgs[r[0]], trang: r[1], mota: r[2], vatlieu: r[3], commodity: r[4], welds: r[5] || '', nghi: r[6] || '', noiDinh: r[7] || '' } : null;
   }
   try {
     fetch('spools.json').then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (j) {
@@ -603,12 +604,14 @@
       return '<span class="wleg">' + weldSvg(t, 'No.').replace(/font-size="13"/, 'font-size="10"') + '<span>' + esc({ S: 'Hàn xưởng', F: 'Hàn công trường', K: 'Mối đính: đính ở xưởng, hàn tại công trường', T: 'Mối ren', B: 'Mối bu lông' }[t]) + '</span></span>';
     }).join('');
   }
-  function weldsHtml(w) {
+  function weldsHtml(w, nghi, noiDinh) {
     var a = String(w || '').split(',').filter(Boolean), cnt = {}, chips = '';
     if (!a.length) return '<span class="lastTouch" style="color:var(--ink)">Mối hàn: <b>không có mối hàn trên bản vẽ spool này</b></span>';
-    a.forEach(function (x) { var t = x.slice(-1), n = x.slice(0, -1); cnt[t] = (cnt[t] || 0) + 1; chips += '<span class="wchip">' + weldSvg(t, n) + '</span>'; });
+    a.forEach(function (x) { var q = x.slice(-1) === '!'; if (q) x = x.slice(0, -1); var t = x.slice(-1), n = x.slice(0, -1); cnt[t] = (cnt[t] || 0) + 1; chips += '<span class="wchip' + (q ? ' wq' : '') + '">' + weldSvg(t, n) + (q ? '<b class="wqm">?</b>' : '') + '</span>'; });
     var sum = ['S', 'F', 'K', 'T', 'B'].filter(function (t) { return cnt[t]; }).map(function (t) { return cnt[t] + ' ' + WELD_NAME[t]; }).join(' · ');
     return '<span class="lastTouch" style="color:var(--ink)">Mối hàn (' + a.length + '): <b>' + esc(sum) + '</b></span><span class="lastTouch wrow">' + chips + '</span>' +
+      (noiDinh ? '<span class="lastTouch" style="color:var(--ink)">Mối đính thường nối: <b>' + esc(noiDinh) + '</b> <span style="color:var(--mute)">(gợi ý theo BOM, ít gặp trường hợp khác)</span></span>' : '') +
+      (nghi ? '<span class="lastTouch" style="color:var(--warn)">⚠ Cần xác nhận với bản vẽ: ' + esc(nghi).split(' | ').join('; ') + '</span>' : '') +
       '<details class="lastTouch"><summary>Chú giải ký hiệu</summary><span class="wlegs">' + weldLegend() + '</span></details>';
   }
   function renderDetailBox() {
@@ -629,7 +632,7 @@
     if (ci) {
       html += '<span class="lastTouch" style="color:var(--ink)">Thuộc gói: <b>' + esc(ci.goi) + '</b> &nbsp;·&nbsp; Trang PDF: <b>' + esc(ci.trang) + '</b>' +
         (ci.vatlieu ? ' &nbsp;·&nbsp; Vật liệu ống: <b>' + esc(ci.vatlieu) + '</b>' : '') + '</span>' +
-        '<span class="lastTouch" style="color:var(--ink)">Mô tả: ' + esc(ci.mota) + '</span>' + weldsHtml(ci.welds);
+        '<span class="lastTouch" style="color:var(--ink)">Mô tả: ' + esc(ci.mota) + '</span>' + weldsHtml(ci.welds, ci.nghi, ci.noiDinh);
     } else if (CAT) {
       html += '<span class="lastTouch">Mã này chưa có trong danh mục bản vẽ (spools.json) — chưa biết thuộc gói nào.</span>';
     }
