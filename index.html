@@ -85,7 +85,6 @@
   .stageItem .tag { font-size:11px; color:var(--mute); }
   .summary { background:#eef3f8; border-radius:8px; padding:10px 12px; font-size:14px; margin:12px 0; }
   .summary b { color:var(--pri); }
-  #stageCard.unl .stageScroll, #stageCard.unl .summary, #stageCard.unl #palletBox, #stageCard.unl #noteBox, #stageCard.unl > .row { display:none !important; }
   tr.unl td { background:#ffe9a8; } .unlTag { display:inline-block; background:var(--warn); color:#fff; border-radius:4px; padding:0 6px; font-size:11px; margin-left:4px; white-space:nowrap; }
   .warn { background:#fff4e5; color:var(--warn); border-radius:8px; padding:8px 10px; font-size:13px; margin:10px 0; }
   .warn:empty, .warn.hide { display:none; }
@@ -186,7 +185,7 @@
  
   <div class="card">
     <h3>3. Danh sách chi tiết (giống sheet DanhSachChiTiet / file Excel checklist)</h3>
-    <div style="font-size:12.5px; color:var(--mute); margin-bottom:6px;">Mã nào quét/tra cứu mà chưa có trong danh sách sẽ <b>không</b> được tự thêm vào đây — chỉ ghi vào lịch sử (mục 5) và tô vàng để nhận biết; khi bạn bổ sung mã vào danh sách thì dòng lịch sử đó tự hết tô màu. Bấm "Sửa" để điền thông tin còn thiếu. Thực tế sẽ liên kết với file Excel checklist trên máy bạn.</div>
+    <div style="font-size:12.5px; color:var(--mute); margin-bottom:6px;">Mã chỉ tra cứu mà chưa có trong danh sách <b>không</b> bị thêm vào đây, chỉ ghi vào lịch sử (mục 5) và tô vàng. Nếu bạn xác nhận lưu công đoạn cho mã đó, app hỏi lại rồi thêm 1 dòng có ghi chú "Tự thêm…"; khi bạn xóa ghi chú này (sau khi bổ sung thông tin), các dòng lịch sử của mã đó tự hết tô màu. Bấm "Sửa" để điền thông tin còn thiếu. Thực tế sẽ liên kết với file Excel checklist trên máy bạn.</div>
     <div class="tableScroll" id="masterTableWrap"></div>
     <div style="margin-top:8px">
       <button class="btn-sec btn-sm" data-demo="210NG210133201">Thử: mã thật 210-NG-21013-32-SP01 (hiện gói + mô tả)</button>
@@ -469,8 +468,8 @@
     var html = '<table><tr><th>Thời gian</th><th>Mã chi tiết</th><th>Drawing No.</th><th>Spool No</th><th>Hành động</th><th>Công đoạn</th><th>Pallet</th><th>Ghi chú</th></tr>';
     for (var i = LOG.length - 1; i >= 0; i--) {
       var g = LOG[i];
-      var un = g.unlisted && !MASTER_LIST[g.code];   // hết đánh dấu khi mã đã có trong Danh sách chi tiết
-      html += '<tr' + (un ? ' class="unl"' : '') + '><td>' + g.time.toLocaleString('vi-VN') + '</td><td>' + esc(g.code) + (un ? '<span class="unlTag">Chưa có trong danh sách</span>' : '') + '</td><td>' + esc(g.dwg) + '</td><td>' + esc(g.sp) + '</td><td>' + esc(g.action) + '</td><td>' + esc(g.stage) + '</td><td>' + esc(g.pallet || '—') + '</td><td>' + esc(g.note || '—') + '</td></tr>';
+      var mm = MASTER_LIST[g.code], un = (g.unlisted && !mm) || (mm && /^Tự thêm/.test(mm.note || ''));   // hết đánh dấu khi mã đã có trong Danh sách chi tiết
+      html += '<tr' + (un ? ' class="unl"' : '') + '><td>' + g.time.toLocaleString('vi-VN') + '</td><td>' + esc(g.code) + (un ? '<span class="unlTag">' + (mm ? 'Chờ bổ sung' : 'Chưa có trong danh sách') + '</span>' : '') + '</td><td>' + esc(g.dwg) + '</td><td>' + esc(g.sp) + '</td><td>' + esc(g.action) + '</td><td>' + esc(g.stage) + '</td><td>' + esc(g.pallet || '—') + '</td><td>' + esc(g.note || '—') + '</td></tr>';
     }
     html += '</table>';
     wrap.innerHTML = html;
@@ -620,7 +619,7 @@
   }
   function renderDetailBox() {
     var html;
-    if (!currentMaster) html = '<b style="color:var(--warn)">Mã này chưa có trong Danh sách chi tiết</b> — chỉ được ghi vào lịch sử tra cứu (đánh dấu), chưa thể cập nhật công đoạn.';
+    if (!currentMaster) html = 'Chưa có công đoạn cuối trong danh sách chi tiết.';
     else {
       html = 'Công đoạn cuối: <b>' + (currentMaster.congDoanCuoi ? esc(currentMaster.congDoanCuoi) : '<span style="color:var(--warn)">chưa có — bấm Sửa ở mục 3 để bổ sung</span>') + '</b>' +
         (currentMaster.congDoanAuto ? ' <span style="color:var(--mute)">(tự suy ra vì chi tiết có màu sơn)</span>' : '');
@@ -628,7 +627,9 @@
       if (fc) {
         html += ' &nbsp;·&nbsp; Màu sơn: ' + swatchHtml(fc) + '<b>' + esc(fc) + '</b> <span style="color:var(--mute)">(theo Commodity: ' + esc(currentMaster.commodity) + ')</span>';
       }
-      if (currentMaster.autoAdded) {
+      if (currentMaster.pendingNew) {
+        html += '<span class="lastTouch" style="color:var(--warn)">⚠ Mã này chưa có trong Danh sách chi tiết (chưa được thêm).</span>';
+      } else if (currentMaster.autoAdded) {
         html += '<span class="lastTouch" style="color:var(--warn)">⚠ Dòng này vừa được tự thêm vào Danh sách chi tiết, còn thiếu thông tin — vào mục "3. Danh sách chi tiết" để bổ sung.</span>';
       }
     }
@@ -687,17 +688,14 @@
  
     function afterLookup(isNewMaster, connErr, notInList) {
       currentMaster = MASTER_LIST[p.code];
-      stageCard.classList.toggle('unl', !!notInList);
-      if (notInList) {
-        currentMaster = null; currentAllow = null; existingStage = -1;
-        notFoundWarn.textContent = '⚠ Mã này CHƯA CÓ trong Danh sách chi tiết — chỉ được ghi vào lịch sử tra cứu (dòng tô vàng), KHÔNG thêm vào danh sách và chưa cập nhật được công đoạn. Nếu mã đúng, hãy bổ sung vào Danh sách chi tiết rồi tra lại; nếu nhập sai thì bỏ qua.';
-        renderDetailBox();
-        stageCard.hidden = false; saveMsg.textContent = ''; saveMsg.className = 'msg';
-        if (!fromLiveTyping) stageCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        if (firstTimeThisRaw) logAction(currentCode, 'Tra cứu', 'Chưa có trong danh sách', '', 'Mã chưa có trong Danh sách chi tiết — chỉ ghi lịch sử, không thêm vào danh sách', true);
-        return;
-      }
-      if (connErr) {
+      if (notInList) {   // mã chưa có trong danh sách: dùng dòng tạm (chưa ghi vào danh sách cho tới khi bạn xác nhận lưu công đoạn)
+        var ci0 = catInfo(p.code);
+        currentMaster = { dwg: p.dwg, sp: p.sp, qty: ci0 ? '1' : '', weight: '', description: ci0 ? ci0.mota : '', typeMaterial: ci0 ? ci0.vatlieu : '', paintType: '',
+          commodity: ci0 ? ci0.commodity : '', paintSystem: '', ngayGiaoHang: '', note: '', congDoanCuoi: '', pendingNew: true };
+        autoFinalStage(currentMaster);
+        notFoundWarn.textContent = '⚠ Mã này CHƯA CÓ trong Danh sách chi tiết. Lượt tra cứu đã ghi vào lịch sử (dòng tô vàng). Nếu bạn xác nhận lưu công đoạn, app sẽ hỏi lại rồi thêm 1 dòng mới có ghi chú "Tự thêm…" vào danh sách; xóa ghi chú đó sau khi bổ sung thì lịch sử hết tô màu.';
+        currentAllow = currentMaster.congDoanCuoi ? allowedSet(currentMaster.congDoanCuoi) : null;
+      } else if (connErr) {
         notFoundWarn.textContent = '⚠ Không kết nối được Google Sheet (' + connErr + ') — đang dùng dữ liệu tạm trên trình duyệt. Kiểm tra lại Web app URL ở mục "Kết nối Google Sheet".';
         currentAllow = currentMaster.congDoanCuoi ? allowedSet(currentMaster.congDoanCuoi) : null;
       } else if (isNewMaster) {
@@ -725,7 +723,7 @@
       // nối Google Sheet thì bản ghi thật/đầy đủ nằm ở sheet LichSuCapNhat (server đã tự ghi rồi).
       if (firstTimeThisRaw) {
         logAction(currentCode, 'Tra cứu', (rec ? STAGES[rec.stage] : 'Chưa bắt đầu'), '',
-          isNewMaster ? 'Mã chưa có trong Danh sách chi tiết — đã tự thêm dòng mới, cần bổ sung thông tin' : '');
+          notInList ? 'Mã chưa có trong Danh sách chi tiết — chưa thêm vào danh sách' : '', !!notInList);
       }
     }
  
@@ -776,7 +774,7 @@
   };
  
   document.getElementById('btnConfirm').onclick = function () {
-    if (!currentCode || !currentMaster || selectedStage < 0) return;
+    if (!currentCode || selectedStage < 0) return;
     var prevRec = DB[currentCode] || null;
     var prevPallet = prevRec ? prevRec.pallet : '';
     var isDowngrade = existingStage >= 0 && selectedStage < existingStage;
@@ -796,7 +794,10 @@
     var actionType = isDowngrade ? 'Hạ công đoạn (sửa lỗi)' : (isPalletChange ? 'Đổi Pallet' : (selectedStage === FINAL_I ? 'Đóng kiện' : 'Cập nhật công đoạn'));
     var stageNote = isPalletChange ? (STAGES[selectedStage] + ' (Pallet cũ: ' + prevPallet + ')') : STAGES[selectedStage];
  
+    var addingNew = !!(currentMaster && currentMaster.pendingNew);
+    if (addingNew && !window.confirm('Mã ' + currentCode + ' CHƯA CÓ trong Danh sách chi tiết.\n\nXác nhận thêm mã này vào danh sách (kèm ghi chú "Tự thêm… cần bổ sung") và lưu công đoạn "' + STAGES[selectedStage] + '"?\n\nNếu nhập sai mã, bấm Hủy.')) return;
     function afterSave() {
+      currentMaster = MASTER_LIST[currentCode] || currentMaster;
       logAction(currentCode, actionType, stageNote, pallet, note);
       existingStage = selectedStage;
       noteInput.value = '';
@@ -809,7 +810,7 @@
       saveMsg.textContent = 'Đang lưu lên Google Sheet…'; saveMsg.className = 'msg';
       remoteCall('capNhat', {
         code: currentCode, dwg: currentParsed.dwg, sp: currentParsed.sp,
-        stageIndex: selectedStage, pallet: pallet, note: note
+        stageIndex: selectedStage, pallet: pallet, note: note, confirmAdd: addingNew ? '1' : ''
       }).then(function (resp) {
         if (!resp.ok) { saveMsg.textContent = '⚠ ' + (resp.error || 'Lỗi không lưu được.'); saveMsg.className = 'msg err'; return; }
         applyServerInfo(currentCode, resp.data);
@@ -821,6 +822,7 @@
         saveMsg.className = 'msg err';
       });
     } else {
+      if (addingNew) ensureLocalMaster(currentParsed);
       DB[currentCode] = { dwg: currentParsed.dwg, sp: currentParsed.sp, stage: selectedStage, pallet: pallet, note: note, updatedAt: new Date() };
       saveMsg.textContent = '✔ Đã lưu (tạm, trên trình duyệt) — chưa nối Google Sheet.';
       saveMsg.className = 'msg ok';

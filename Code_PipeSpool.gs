@@ -3,7 +3,9 @@
  *
  * Ứng dụng gọi bằng GET:  <Web app URL>?action=traCuu|capNhat&code=...&dwg=...&sp=...
  *   traCuu : tra một mã; mã chưa có trong DanhSachChiTiet KHÔNG bị thêm vào, chỉ ghi lịch sử (tô vàng, tự hết tô khi mã được bổ sung).
- *   capNhat: ghi công đoạn (chỉ cho mã đã có trong DanhSachChiTiet) (stageIndex 0..12), pallet, ghi chú vào TrangThaiSanPham + LichSuCapNhat.
+ *   capNhat: ghi công đoạn (stageIndex 0..12), pallet, ghi chú vào TrangThaiSanPham + LichSuCapNhat.
+ *            Mã chưa có trong DanhSachChiTiet: chỉ thêm dòng mới (ghi chú "Tự thêm…") khi app gửi confirmAdd=1 sau khi người dùng xác nhận.
+ *   Lịch sử cột I đánh dấu & tô vàng mã chưa có / mã tự thêm; hết tô khi mã đã có và ghi chú "Tự thêm…" đã bị xóa.
  * Trả về JSON: { ok, notInList, data: { master, status } } hoặc { ok:false, error }.
  *
  * CÁCH DÙNG
@@ -74,6 +76,22 @@ function nextFreeRow_(sh) {   // dòng đầu tiên sau dòng cuối có Mã chi
 }
 
 /* ---------- DanhSachChiTiet ---------- */
+function ensureMaster_(p, code) {
+  var sh = sheet_(SH_MASTER), r = findRow_(sh, code);
+  if (r) return { row: r, added: false };
+  r = nextFreeRow_(sh);
+  var dwg = s_(p.dwg) || code.replace(/-SP\d+$/, '');
+  var sp = s_(p.sp) || (code.match(/SP\d+$/) || [''])[0];
+  var comm = dwg.split('-')[1] || '';
+  sh.getRange(r, 2, 1, 4).setValues([[code, dwg, sp, 1]]);
+  sh.getRange(r, 12).setValue(comm);
+  sh.getRange(r, 1).setFormula('=IF(B' + r + '="","",ROW()-1)');
+  sh.getRange(r, 11).setFormula('=IFERROR(INDEX(BangMauSon!$C:$C,MATCH(L' + r + ',BangMauSon!$B:$B,0)),"")');
+  sh.getRange(r, 17).setFormula('=IF(OR(F' + r + '="",G' + r + '="",P' + r + '=""),"Cần bổ sung","Đầy đủ")');
+  sh.getRange(r, 15).setValue('Tự thêm khi cập nhật công đoạn - cần bổ sung thông tin (xóa ghi chú này sau khi bổ sung để lịch sử hết tô màu)');
+  SpreadsheetApp.flush();
+  return { row: r, added: true };
+}
 function masterObj_(r) {
   var v = sheet_(SH_MASTER).getRange(r, 1, 1, 21).getValues()[0];
   // Chưa nhập Công đoạn cuối nhưng đã có màu sơn cụ thể (số RAL) -> mặc định "Hoàn thiện sơn"
@@ -128,7 +146,7 @@ function statusObj_(code) {
 /* ---------- LichSuCapNhat ---------- */
 var LOG_FLAG_TEXT = 'Chưa có trong danh sách';
 function logFlagFormula_(r) {
-  return '=IF(B' + r + '="","",IF(COUNTIF(' + SH_MASTER + '!$B:$B,B' + r + ')=0,"' + LOG_FLAG_TEXT + '",""))';
+  return '=IF(B' + r + '="","",IF(COUNTIF(' + SH_MASTER + '!$B:$B,B' + r + ')=0,"' + LOG_FLAG_TEXT + '",IF(LEFT(IFERROR(INDEX(' + SH_MASTER + '!$O:$O,MATCH(B' + r + ',' + SH_MASTER + '!$B:$B,0)),""),6)="Tự thêm","Chờ bổ sung (tự thêm)","")))';
 }
 function writeLog_(code, dwg, sp, action, stage, pallet, note) {
   var sh = sheet_(SH_LOG);
@@ -168,8 +186,11 @@ function capNhat_(p, code) {
   if (isNaN(idx) || idx < 0 || idx > FINAL_I) throw new Error('Công đoạn không hợp lệ.');
   var mr = findRow_(sheet_(SH_MASTER), code);
   if (!mr) {
-    writeLog_(code, s_(p.dwg), s_(p.sp), 'Cập nhật bị từ chối', 'Chưa có trong danh sách', '', 'Mã chưa có trong Danh sách chi tiết - chưa thể cập nhật công đoạn');
-    throw new Error('Mã này chưa có trong Danh sách chi tiết nên chưa thể cập nhật công đoạn. Hãy bổ sung mã vào danh sách trước.');
+    if (s_(p.confirmAdd) !== '1') {
+      writeLog_(code, s_(p.dwg), s_(p.sp), 'Cập nhật bị từ chối', 'Chưa có trong danh sách', '', 'Mã chưa có trong Danh sách chi tiết - chưa được xác nhận thêm');
+      throw new Error('Mã này chưa có trong Danh sách chi tiết - cần xác nhận thêm vào danh sách trước khi cập nhật công đoạn.');
+    }
+    mr = ensureMaster_(p, code).row;
   }
   var master = masterObj_(mr);
   var allow = allowedSet_(master.congDoanCuoi);
@@ -225,7 +246,7 @@ function caiDatCanhBaoLichSu() {
   for (var r = 2; r <= last; r++) f.push([logFlagFormula_(r)]);
   sh.getRange(2, 9, f.length, 1).setFormulas(f);
   var rule = SpreadsheetApp.newConditionalFormatRule()
-    .whenFormulaSatisfied('=$I2="' + LOG_FLAG_TEXT + '"')
+    .whenFormulaSatisfied('=$I2<>""')
     .setBackground('#FFE599').setBold(true)
     .setRanges([sh.getRange(2, 1, 5000, 9)]).build();
   sh.setConditionalFormatRules([rule]);   // thay các quy tắc tô màu cũ (nếu có) của sheet này
