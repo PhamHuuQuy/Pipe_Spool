@@ -286,20 +286,29 @@
     { code: 'IA',   color: 'Light Blue (RAL 5012)',     note: 'Instrument Air' },
     { code: 'PA',   color: 'Light Blue (RAL 5012)',     note: 'Plant Air' },
     { code: 'NI',   color: 'Agate Grey (RAL 7038)',     note: 'Nitrogen' },
-    { code: 'PW',   color: 'Traffic Green (RAL 6024)',  note: 'Potable Water' },
-    { code: 'FG',   color: 'Traffic Green (RAL 6024)',  note: 'Demi Water' },
-    { code: 'GW',   color: 'Signal Violet (RAL 4008)',  note: 'Glycol Water — cần xác nhận lại RAL' },
+    { code: 'PW',   color: 'Traffic Green (RAL 6024)',  note: 'Potable Water — theo Spec Appendix-B, không có trong Coating Schedule' },
+    { code: 'FG',   color: 'Traffic White (RAL 9016)',  note: 'Fuel Gas (class 1C1) — theo Coating Schedule' },
+    { code: 'GW',   color: 'Signal Violet (RAL 4008)',  note: 'Glycol Water — đã xác nhận RAL 4008' },
     { code: 'DI',   color: 'Signal Brown (RAL 8002)',   note: 'Diesel Oil' },
     { code: 'LO',   color: 'Signal Brown (RAL 8002)',   note: 'Lube Oil' },
     { code: 'FW',   color: 'Flame Red (RAL 3000)',      note: 'Fire Water' },
-    { code: 'D',    color: 'Theo đường ống chính',      note: 'Drain: cùng màu đường ống tương ứng' },
-    { code: 'TRIM', color: 'Chưa quy định',              note: 'Trim: cập nhật sau' }
+    { code: 'D',    color: 'Theo đường ống chính',      note: 'Drain: cùng màu đường ống tương ứng (spool D hiện đều là inox)' },
+    { code: 'TRIM', color: 'Chưa quy định',              note: 'Trim: Coating Schedule ghi "Update later"' },
+    { code: 'INOX', color: "Maker's Standard (Grey)",  note: 'Thép không gỉ: hệ TBC Hi-Pon 300 CUI; bọc nhiệt <50°C không sơn (Spec 3.4.1)' }
   ];
   var BANG_MAU_SON_MAP = {}; BANG_MAU_SON.forEach(function (r) { BANG_MAU_SON_MAP[r.code] = r; });
-  function finishColorFor(commodity) {
+  function isInox(material) { return /inox/i.test(String(material || '')); }
+  function finishColorFor(commodity, material) {
+    if (isInox(material)) return BANG_MAU_SON_MAP['INOX'].color;   // inox: màu xám theo nhà sản xuất sơn (Coating Schedule)
     var r = BANG_MAU_SON_MAP[String(commodity || '').trim().toUpperCase()];
     return r ? r.color : '';
   }
+  /* Hệ sơn theo H025-ME-000-SPE-0014 Rev J + Coating Specification Schedule (06/10/2026) */
+  var PAINT_SYS = {
+    CS: { type: 'CS-MT', system: 'Sa 2.5 | Zinky-25 Epoxy Zinc Primer 70µm + Hi-Pon 30-02 Epoxy MIO 200µm + Hi-Pon 50-01 PU 50µm = 320µm (3 lớp)' },
+    SS: { type: 'SS-TBC', system: "SSPC-SP16 | Hi-Pon 300 CUI Epoxy Phenolic (Hi 300CU) 40–60µm (1 lớp), xám Maker's Standard" }
+  };
+  function paintFor(m) { return m ? (isInox(m.typeMaterial) ? PAINT_SYS.SS : (m.typeMaterial ? PAINT_SYS.CS : null)) : null; }
  
   /* ---- Danh sách chi tiết (tương ứng sheet DanhSachChiTiet / file Excel checklist thật của bạn) ----
      Cấu trúc theo đúng cột trong file checklist: Drawing No., Spool No, Quantity, Weight (kgs),
@@ -350,7 +359,7 @@
   // Chi tiết đã có mã màu + màu sơn cụ thể (số RAL) mà chưa nhập Công đoạn cuối -> mặc định là "Hoàn thiện sơn".
   // Giá trị nhập tay ở cột Công đoạn cuối luôn được ưu tiên. D/TRIM chưa có màu cụ thể nên không tự suy ra.
   function autoFinalStage(m) {
-    if (m && !m.congDoanCuoi && /RAL\s*\d{4}/.test(finishColorFor(m.commodity))) {
+    if (m && !m.congDoanCuoi && /RAL\s*\d{4}/.test(finishColorFor(m.commodity, m.typeMaterial))) {
       m.congDoanCuoi = 'Hoàn thiện sơn'; m.congDoanAuto = true;
     }
     return m;
@@ -623,10 +632,12 @@
     else {
       html = 'Công đoạn cuối: <b>' + (currentMaster.congDoanCuoi ? esc(currentMaster.congDoanCuoi) : '<span style="color:var(--warn)">chưa có — bấm Sửa ở mục 3 để bổ sung</span>') + '</b>' +
         (currentMaster.congDoanAuto ? ' <span style="color:var(--mute)">(tự suy ra vì chi tiết có màu sơn)</span>' : '');
-      var fc = finishColorFor(currentMaster.commodity);
+      var fc = finishColorFor(currentMaster.commodity, currentMaster.typeMaterial);
       if (fc) {
-        html += ' &nbsp;·&nbsp; Màu sơn: ' + swatchHtml(fc) + '<b>' + esc(fc) + '</b> <span style="color:var(--mute)">(theo Commodity: ' + esc(currentMaster.commodity) + ')</span>';
+        html += ' &nbsp;·&nbsp; Màu sơn: ' + swatchHtml(fc) + '<b>' + esc(fc) + '</b> <span style="color:var(--mute)">(' + (isInox(currentMaster.typeMaterial) ? 'thép không gỉ' : 'theo Commodity: ' + esc(currentMaster.commodity)) + ')</span>';
       }
+      var pf = paintFor(currentMaster);
+      if (pf) html += '<span class="lastTouch" style="color:var(--ink)">Hệ sơn: <b>' + esc(currentMaster.paintType || pf.type) + '</b> — ' + esc(currentMaster.paintSystem || pf.system) + (isInox(currentMaster.typeMaterial) ? ' <span style="color:var(--warn)">(inox bọc nhiệt &lt;50°C thì không sơn — cần xác nhận)</span>' : '') + '</span>';
       if (currentMaster.pendingNew) {
         html += '<span class="lastTouch" style="color:var(--warn)">⚠ Mã này chưa có trong Danh sách chi tiết (chưa được thêm).</span>';
       } else if (currentMaster.autoAdded) {
@@ -655,7 +666,7 @@
   }
   // Mã màu hiển thị theo đúng số RAL ghi trong bảng (nếu không có số RAL cụ thể thì trả '' -> ô gạch chéo "chưa xác định màu")
   var RAL_HEX = { '9016':'#F1F0EA', '5012':'#3481B8', '7038':'#B4B8B0', '6024':'#008351', '4008':'#924E7D', '8002':'#7B5141', '3000':'#AF2B1E' };
-  function ralHex(name) { var m = String(name || '').match(/RAL\s*(\d{4})/); return m && RAL_HEX[m[1]] ? RAL_HEX[m[1]] : ''; }
+  function ralHex(name) { var m = String(name || '').match(/RAL\s*(\d{4})/); return m && RAL_HEX[m[1]] ? RAL_HEX[m[1]] : (/Maker/i.test(String(name || '')) ? '#9AA0A6' : ''); }
   function swatchHtml(name, big) {
     var h = ralHex(name), c = big ? 'paintBig' : 'paintSwatch';
     return h ? '<span class="' + c + '" style="background:' + h + '" title="' + esc(name) + '"></span>'
@@ -839,7 +850,7 @@
     keys.forEach(function (k) {
       var r = DB[k];
       var m = MASTER_LIST[k];
-      var fc = m ? finishColorFor(m.commodity) : '';
+      var fc = m ? finishColorFor(m.commodity, m.typeMaterial) : '';
       html += '<tr><td>' + esc(k) + '</td><td>' + esc(r.dwg) + '</td><td>' + esc(r.sp || '—') + '</td>' +
         '<td>' + (fc ? '' + swatchHtml(fc) + '' + esc(fc) : '—') + '</td>' +
         '<td><span class="chip">' + esc(STAGES[r.stage]) + '</span></td>' +
@@ -863,7 +874,7 @@
     keys.forEach(function (k, idx) {
       var e = MASTER_LIST[k];
       var incomplete = isIncomplete(e);
-      var fc = finishColorFor(e.commodity);
+      var fc = finishColorFor(e.commodity, e.typeMaterial);
       html += '<tr' + (incomplete ? ' class="incomplete"' : '') + '>' +
         '<td>' + (idx + 1) + '</td>' +
         '<td>' + esc(k) + '</td>' +
@@ -896,6 +907,7 @@
   var edCommodity = document.getElementById('edCommodity');
   var edCongDoanCuoi = document.getElementById('edCongDoanCuoi');
   BANG_MAU_SON.forEach(function (r) {
+    if (r.code === 'INOX') return;
     var opt = document.createElement('option'); opt.value = r.code; opt.textContent = r.code + ' — ' + r.color; edCommodity.appendChild(opt);
   });
   STAGES.forEach(function (s) {

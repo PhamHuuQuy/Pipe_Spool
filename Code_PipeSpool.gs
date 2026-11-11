@@ -253,3 +253,64 @@ function caiDatCanhBaoLichSu() {
   SpreadsheetApp.flush();
   Logger.log('Đã cài đặt cảnh báo cho ' + (last - 1) + ' dòng lịch sử.');
 }
+
+/* ---------- Chạy tay MỘT LẦN: cập nhật bảng sơn, hệ sơn và cân nặng (11/11/2026) ----------
+   Nguồn: Spec sơn H025-ME-000-SPE-0014 Rev J, Coating Specification Schedule (06/10/2026), TDS Hi-Pon 300 CUI.
+   Cần file Data_CapNhat.gs (chứa DATA_CAP_NHAT) trong cùng dự án.
+   - BangMauSon: sửa FG (trắng 9016), ghi chú GW/PW/D/TRIM, thêm dòng INOX (xám Maker's Standard).
+   - DanhSachChiTiet: cột K (Finish Color) đổi công thức để inox ra màu xám; điền Paint Type (I), Paint System (M), Weight (F).
+   - Chỉ điền vào ô còn TRỐNG ở Weight / Paint Type / Paint System, không ghi đè số bạn đã nhập. */
+var CS_SYS_ = 'Sa 2.5 | Zinky-25 Epoxy Zinc Primer 70µm + Hi-Pon 30-02 Epoxy MIO 200µm + Hi-Pon 50-01 PU 50µm = 320µm (3 lớp)';
+var SS_SYS_ = "SSPC-SP16 | Hi-Pon 300 CUI Epoxy Phenolic (Hi 300CU) 40–60µm (1 lớp), màu xám Maker's Standard";
+function capNhatSonVaCanNang() {
+  var bm = sheet_(SH_PAINT), bl = bm.getLastRow(), bv = bm.getRange(1, 1, bl, 4).getValues(), seen = {};
+  var chg = {
+    FG: ['Traffic White (RAL 9016)', 'Fuel Gas (class 1C1) - theo Coating Specification Schedule; bản cũ ghi nhầm Demi Water', '#F6F6F6'],
+    GW: [null, 'Glycol Water - đã xác nhận RAL 4008 (Coating Schedule class 1C4 + Spec Appendix-B)'],
+    PW: [null, 'Potable Water - theo Spec Appendix-B (Traffic Green 6024); KHÔNG có trong Coating Schedule, cần xác nhận'],
+    D: [null, 'Drain: cùng màu đường ống tương ứng (Spec 4.3). Spool D trong dữ liệu đều là inox nên theo dòng INOX'],
+    TRIM: [null, 'Trim: Coating Schedule ghi "Update later" - chưa có màu']
+  };
+  for (var i = 1; i < bv.length; i++) {
+    var code = s_(bv[i][1]).trim(); seen[code] = true;
+    if (chg[code]) {
+      if (chg[code][0]) bm.getRange(i + 1, 3).setValue(chg[code][0]);
+      bm.getRange(i + 1, 4).setValue(chg[code][1]);
+      if (chg[code][2]) bm.getRange(i + 1, 1).setBackground(chg[code][2]);
+    }
+  }
+  if (!seen['INOX']) {
+    var nr = bl + 1;
+    bm.getRange(nr, 2, 1, 3).setValues([['INOX', "Maker's Standard (Grey)", 'Thép không gỉ (class 1S1/1S2/6S1): hệ TBC Hi-Pon 300 CUI, màu xám theo nhà sản xuất sơn. Spool inox bọc cách nhiệt <50°C không sơn (Spec 3.4.1)']]);
+    bm.getRange(nr, 1).setBackground('#A6A6A6');
+  }
+  var sh = sheet_(SH_MASTER), last = sh.getLastRow();
+  if (last < 2) return;
+  var n = last - 1;
+  var codes = sh.getRange(2, 2, n, 1).getValues();
+  var wv = sh.getRange(2, 6, n, 1).getValues();
+  var pt = sh.getRange(2, 9, n, 1).getValues();
+  var ps = sh.getRange(2, 13, n, 1).getValues();
+  var kf = [], nw = 0, np = 0, miss = [];
+  for (var r = 0; r < n; r++) {
+    var c = s_(codes[r][0]).trim(), row = r + 2;
+    kf.push(['=IF(ISNUMBER(SEARCH("inox",H' + row + ')),INDEX(BangMauSon!$C:$C,MATCH("INOX",BangMauSon!$B:$B,0)),IFERROR(INDEX(BangMauSon!$C:$C,MATCH(L' + row + ',BangMauSon!$B:$B,0)),""))']);
+    if (!c) continue;
+    var d = DATA_CAP_NHAT[c];
+    if (!d) { miss.push(c); continue; }
+    if (s_(wv[r][0]).trim() === '') { wv[r][0] = d[0]; nw++; }
+    if (s_(pt[r][0]).trim() === '') { pt[r][0] = d[1] === 'S' ? 'SS-TBC' : 'CS-MT'; np++; }
+    if (s_(ps[r][0]).trim() === '') ps[r][0] = d[1] === 'S' ? SS_SYS_ : CS_SYS_;
+  }
+  sh.getRange(2, 11, n, 1).setFormulas(kf);
+  sh.getRange(2, 6, n, 1).setValues(wv);
+  sh.getRange(2, 9, n, 1).setValues(pt);
+  sh.getRange(2, 13, n, 1).setValues(ps);
+  var rules = sh.getConditionalFormatRules();
+  rules.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=$K2="Maker\'s Standard (Grey)"')
+    .setBackground('#A6A6A6').setRanges([sh.getRange(2, 10, n, 1)]).build());
+  sh.setConditionalFormatRules(rules);
+  SpreadsheetApp.flush();
+  var msg = 'Đã điền Weight cho ' + nw + ' dòng, Paint cho ' + np + ' dòng.' + (miss.length ? ' Mã không có trong dữ liệu cập nhật (' + miss.length + '): ' + miss.slice(0, 10).join(', ') : '');
+  Logger.log(msg); return msg;
+}
