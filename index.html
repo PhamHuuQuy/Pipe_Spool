@@ -609,7 +609,7 @@
     else sh = '<polygon points="24,1.5 46,15 24,28.5 2,15" ' + st + '/>';
     var tack = t === 'K' ? '<rect x="3" y="32" width="42" height="14" ' + st + '/><text x="24" y="43" text-anchor="middle" font-size="11" fill="currentColor">Tack</text>' : '';
     return '<svg class="wsvg" viewBox="0 0 48 ' + (t === 'K' ? 48 : 30) + '" width="48" height="' + (t === 'K' ? 48 : 30) + '" role="img" aria-label="' + esc(WELD_NAME[t]) + ' ' + esc(n) + '">' + sh +
-      '<text x="24" y="19.5" text-anchor="middle" font-size="13" font-weight="700" fill="currentColor">' + esc(n) + '</text>' + tack + '</svg>';
+      '<text x="24" y="19.5" text-anchor="middle" font-size="' + (String(n).length > 2 && t !== 'K' ? 10.5 : 13) + '" font-weight="700" fill="currentColor">' + esc(n) + '</text>' + tack + '</svg>';
   }
   function weldLegend() {
     return ['S', 'F', 'K', 'T', 'B'].map(function (t) {
