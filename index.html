@@ -490,7 +490,7 @@
   function catKey(c) { return String(c).replace(/[-_\s]/g, '').replace(/SP/ig, '').toUpperCase(); }
   function catInfo(code) {
     var r = CAT && CAT.items[code];
-    return r ? { goi: CAT.pkgs[r[0]], trang: r[1], mota: r[2], vatlieu: r[3], commodity: r[4], welds: r[5] || '', nghi: r[6] || '', noiDinh: r[7] || '' } : null;
+    return r ? { goi: CAT.pkgs[r[0]], trang: r[1], mota: r[2], vatlieu: r[3], commodity: r[4], welds: r[5] || '', nghi: r[6] || '', noiDinh: r[7] || '', anh: r[8] || '' } : null;
   }
   try {
     fetch('spools.json').then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (j) {
@@ -648,7 +648,8 @@
     if (ci) {
       html += '<span class="lastTouch" style="color:var(--ink)">Thuộc gói: <b>' + esc(ci.goi) + '</b> &nbsp;·&nbsp; Trang PDF: <b>' + esc(ci.trang) + '</b>' +
         (ci.vatlieu ? ' &nbsp;·&nbsp; Vật liệu ống: <b>' + esc(ci.vatlieu) + '</b>' : '') + '</span>' +
-        '<span class="lastTouch" style="color:var(--ink)">Mô tả: ' + esc(ci.mota) + '</span>' + weldsHtml(ci.welds, ci.nghi, ci.noiDinh);
+        '<span class="lastTouch" style="color:var(--ink)">Mô tả: ' + esc(ci.mota) + '</span>' + weldsHtml(ci.welds, ci.nghi, ci.noiDinh) +
+        (ci.anh ? '<details class="lastTouch" open><summary>Ảnh bản vẽ spool (bấm vào ảnh để phóng to)</summary><a href="' + esc(ci.anh) + '" target="_blank" rel="noopener"><img src="' + esc(ci.anh) + '" loading="lazy" alt="Bản vẽ spool" style="max-width:100%;height:auto;border:1px solid #d7dde3;border-radius:6px;margin-top:6px;background:#fff"></a></details>' : '');
     } else if (CAT) {
       html += '<span class="lastTouch">Mã này chưa có trong danh mục bản vẽ (spools.json) — chưa biết thuộc gói nào.</span>';
     }
