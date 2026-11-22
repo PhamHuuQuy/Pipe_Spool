@@ -537,11 +537,12 @@
   (function () {
     var card = document.getElementById('infoFindCard'), inp = document.getElementById('ifInput'), clr = document.getElementById('ifClear'),
         listEl = document.getElementById('ifList'), prevEl = document.getElementById('ifPrev'), navEl = document.getElementById('ifNav'),
-        cntEl = document.getElementById('ifCount'), results = [], selIdx = -1, MAXSHOW = 300;
+        cntEl = document.getElementById('ifCount'), results = [], selIdx = -1, MAXSHOW = 300, near = false;
     function norm(t) { return String(t || '').toLowerCase().replace(/đ/g, 'd').normalize('NFD').replace(/[̀-ͯ]/g, ''); }
     function compact(t) { return norm(t).replace(/[^a-z0-9?*]/g, ''); }
     function escRe(t) { return t.replace(/[.+^${}()|[\]\\]/g, '\\$&'); }
-    var STOP = { chi: 1, tiet: 1, ma: 1, co: 1, va: 1, la: 1, cua: 1, dau: 1, tong: 1, cong: 1, chieu: 1, dai: 1, tinh: 1, ca: 1, khoang: 1, xap: 1, xi: 1, gan: 1, mm: 1, ve: 1, voi: 1, can: 1, tim: 1, son: 1, mau: 1, ong: 0 };
+    var COMPOUND = { 'mat bich': 1, 'con giam': 1, 'te giam': 1, 'te deu': 1, 'khop noi': 1, 'bich mu': 1 };
+    var STOP = { chi: 1, tiet: 1, ma: 1, co: 1, va: 1, la: 1, cua: 1, dau: 1, tong: 1, cong: 1, chieu: 1, dai: 1, tinh: 1, ca: 1, khoang: 1, xap: 1, xi: 1, gan: 1, mm: 1, ve: 1, voi: 1, can: 1, tim: 1, son: 1, mau: 1, tu: 1, den: 1, tam: 1, o: 1, ong: 1, bang: 1, hoac: 1, cho: 1, em: 1, toi: 1, nhu: 1, sau: 1, thi: 1, mot: 0 };
     // tách từ khóa: 4" / 3/4" = kích thước; số nguyên + 1-2 chữ theo sau = cụm ("2 mat bich"); số 3-4 chữ số (hoặc ghi "630mm") = tổng chiều dài (so với các kích thước trên bản vẽ, sai số nhỏ)
     function parseQuery(q) {
       var toks = norm(q).replace(/[“”″]/g, '"').replace(/(\d)\s*mm\b/g, '$1 mm').split(/[\s,;]+/).filter(Boolean), out = [], i = 0;
@@ -553,7 +554,8 @@
         if (/^\d+$/.test(t) && toks[i + 1] === 'mm') { out.push({ k: 'len', v: +t }); i += 2; continue; }
         if (/^\d{3,4}$/.test(t)) { out.push({ k: 'len', v: +t }); i++; continue; }
         if (/^\d+$/.test(t) && i + 1 < toks.length && /^[a-z]+$/.test(toks[i + 1]) && !STOP[toks[i + 1]]) {
-          var ph = [t], j = i + 1; while (j < toks.length && ph.length < 3 && /^[a-z]+$/.test(toks[j]) && !STOP[toks[j]]) { ph.push(toks[j]); j++; }
+          var two = toks[i + 1] + ' ' + (toks[i + 2] || ''), cmp = COMPOUND[two], ph = [t, toks[i + 1]], j = i + 2;
+          if (cmp) { ph.push(toks[i + 2]); j = i + 3; }
           out.push({ k: 'phrase', v: ph.join(' ') }); i = j; continue;
         }
         if (/[?*]/.test(t)) { out.push({ k: 'wild', v: t }); i++; continue; }
@@ -572,6 +574,7 @@
       if (tk.k === 'num') { var r2 = new RegExp('(^|[^0-9.])' + escRe(v) + '([^0-9]|$)'); return function (h) { return r2.test(h.t); }; }
       if (tk.k === 'phrase') { var r3 = new RegExp('(^|[^0-9.])' + escRe(v)); return function (h) { return r3.test(h.t); }; }
       if (tk.k === 'wild') { var r4 = new RegExp(compact(v).replace(/\?/g, '.').replace(/\*/g, '.*')); return function (h) { return r4.test(h.c); }; }
+      if (v === 'socket' || v === 'sw') return function (h) { return h.t.indexOf('socket') >= 0 || /(3000|6000)#/.test(h.t); };
       var cv = compact(v); return function (h) { return h.t.indexOf(v) >= 0 || (cv.length >= 3 && /\d/.test(cv) && h.c.indexOf(cv) >= 0); };
     }
     function hay(code, r) {
@@ -591,12 +594,17 @@
       if (!HAY) { HAY = {}; Object.keys(CAT.items).forEach(function (k) { HAY[k] = hay(k, CAT.items[k]); }); }
       var hasLen = parseQuery(q).some(function (t) { return t.k === 'len'; });
       Object.keys(CAT.items).forEach(function (k) { var h = HAY[k]; h.err = null; if (tests.every(function (f) { return f(h); })) { results.push(k); h.e2 = h.err; } });
+      near = false;
+      if (!results.length && tests.length > 1) {   // không có mã khớp hết -> gợi ý mã khớp gần đủ (thiếu đúng 1 từ khóa)
+        Object.keys(CAT.items).forEach(function (k) { var h = HAY[k], miss = 0; h.err = null; tests.forEach(function (f) { if (!f(h)) miss++; }); if (miss === 1) { results.push(k); h.e2 = h.err; } });
+        near = results.length > 0;
+      }
       results.sort(function (a, b) { var x = CAT.items[a], y = CAT.items[b]; if (hasLen && HAY[a].e2 !== HAY[b].e2) return (HAY[a].e2 == null ? 1e9 : HAY[a].e2) - (HAY[b].e2 == null ? 1e9 : HAY[b].e2); return (x[0] - y[0]) || ((+x[1]) - (+y[1])) || (a < b ? -1 : 1); });
       renderList();
     }
     function renderList() {
       if (!results.length) { cntEl.innerHTML = '<b>Không tìm thấy</b> mã nào khớp. Thử bớt từ khóa, hoặc dùng ? cho ký tự bị mờ.'; listEl.hidden = true; return; }
-      cntEl.innerHTML = 'Tìm thấy <b>' + results.length + '</b> mã' + (results.length > MAXSHOW ? ' (chỉ hiện ' + MAXSHOW + ' mã đầu — hãy thêm từ khóa để thu hẹp)' : '') + '. Bấm vào 1 mã để xem bản vẽ; muốn xem mã khác chỉ cần bấm tiếp mã khác trong danh sách.';
+      cntEl.innerHTML = (near ? '<span style="color:var(--warn)">Không có mã nào khớp đủ mọi từ khóa — dưới đây là các mã <b>khớp gần đủ</b> (thiếu 1 từ khóa). Thử bớt bớt từ khóa.</span><br>' : '') + 'Tìm thấy <b>' + results.length + '</b> mã' + (results.length > MAXSHOW ? ' (chỉ hiện ' + MAXSHOW + ' mã đầu — hãy thêm từ khóa để thu hẹp)' : '') + '. Bấm vào 1 mã để xem bản vẽ; muốn xem mã khác chỉ cần bấm tiếp mã khác trong danh sách.';
       listEl.hidden = false;
       listEl.innerHTML = results.slice(0, MAXSHOW).map(function (k, i) {
         var r = CAT.items[k];
