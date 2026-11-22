@@ -542,7 +542,7 @@
     function compact(t) { return norm(t).replace(/[^a-z0-9?*]/g, ''); }
     function escRe(t) { return t.replace(/[.+^${}()|[\]\\]/g, '\\$&'); }
     var COMPOUND = { 'mat bich': 1, 'con giam': 1, 'te giam': 1, 'te deu': 1, 'khop noi': 1, 'bich mu': 1 };
-    var STOP = { chi: 1, tiet: 1, ma: 1, co: 1, va: 1, la: 1, cua: 1, dau: 1, tong: 1, cong: 1, chieu: 1, dai: 1, tinh: 1, ca: 1, khoang: 1, xap: 1, xi: 1, gan: 1, mm: 1, ve: 1, voi: 1, can: 1, tim: 1, son: 1, mau: 1, tu: 1, den: 1, tam: 1, o: 1, ong: 1, bang: 1, hoac: 1, cho: 1, em: 1, toi: 1, nhu: 1, sau: 1, thi: 1, mot: 0 };
+    var STOP = { chi: 1, tiet: 1, ma: 1, co: 1, va: 1, la: 1, cua: 1, dau: 1, tong: 1, cong: 1, chieu: 1, dai: 1, tinh: 1, ca: 1, khoang: 1, xap: 1, xi: 1, gan: 1, mm: 1, ve: 1, voi: 1, can: 1, tim: 1, son: 1, mau: 1, tu: 1, den: 1, tam: 1, o: 1, ong: 1, bang: 1, hoac: 1, cho: 1, em: 1, toi: 1, nhu: 1, sau: 1, thi: 1, mot: 0, noi: 1, di: 1, giua: 1, hai: 0 };
     // tách từ khóa: 4" / 3/4" = kích thước; số nguyên + 1-2 chữ theo sau = cụm ("2 mat bich"); số 3-4 chữ số (hoặc ghi "630mm") = tổng chiều dài (so với các kích thước trên bản vẽ, sai số nhỏ)
     function parseQuery(q) {
       var toks = norm(q).replace(/[“”″]/g, '"').replace(/(\d)\s*mm\b/g, '$1 mm').split(/[\s,;]+/).filter(Boolean), out = [], i = 0;
@@ -552,6 +552,7 @@
         if (/^ral\d{4}$/.test(t)) { out.push({ k: 'word', v: 'ral ' + t.slice(3) }); i++; continue; }
         if (t === 'ral' && i + 1 < toks.length && /^\d{4}$/.test(toks[i + 1])) { out.push({ k: 'word', v: 'ral ' + toks[i + 1] }); i += 2; continue; }
         if (/^\d+$/.test(t) && toks[i + 1] === 'mm') { out.push({ k: 'len', v: +t }); i += 2; continue; }
+        if (/^\d{3,5}m$/.test(t)) { out.push({ k: 'len', v: parseInt(t, 10) }); i++; continue; }   // '2000m' gõ thiếu chữ m thứ hai = 2000 mm
         if (/^\d{3,4}$/.test(t)) { out.push({ k: 'len', v: +t }); i++; continue; }
         if (/^\d+$/.test(t) && i + 1 < toks.length && /^[a-z]+$/.test(toks[i + 1]) && !STOP[toks[i + 1]]) {
           var two = toks[i + 1] + ' ' + (toks[i + 2] || ''), cmp = COMPOUND[two], ph = [t, toks[i + 1]], j = i + 2;
