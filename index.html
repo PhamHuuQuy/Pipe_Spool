@@ -541,13 +541,16 @@
     function norm(t) { return String(t || '').toLowerCase().replace(/đ/g, 'd').normalize('NFD').replace(/[̀-ͯ]/g, ''); }
     function compact(t) { return norm(t).replace(/[^a-z0-9?*]/g, ''); }
     function escRe(t) { return t.replace(/[.+^${}()|[\]\\]/g, '\\$&'); }
-    var STOP = { chi: 1, tiet: 1, ma: 1, co: 1, va: 1, la: 1, cua: 1, dau: 1, tong: 1, cong: 1, chieu: 1, dai: 1, tinh: 1, ca: 1, khoang: 1, xap: 1, xi: 1, gan: 1, mm: 1, ve: 1, voi: 1, can: 1, tim: 1, ong: 0 };
+    var STOP = { chi: 1, tiet: 1, ma: 1, co: 1, va: 1, la: 1, cua: 1, dau: 1, tong: 1, cong: 1, chieu: 1, dai: 1, tinh: 1, ca: 1, khoang: 1, xap: 1, xi: 1, gan: 1, mm: 1, ve: 1, voi: 1, can: 1, tim: 1, son: 1, mau: 1, ong: 0 };
     // tách từ khóa: 4" / 3/4" = kích thước; số nguyên + 1-2 chữ theo sau = cụm ("2 mat bich"); số 3-4 chữ số (hoặc ghi "630mm") = tổng chiều dài (so với các kích thước trên bản vẽ, sai số nhỏ)
     function parseQuery(q) {
       var toks = norm(q).replace(/[“”″]/g, '"').replace(/(\d)\s*mm\b/g, '$1 mm').split(/[\s,;]+/).filter(Boolean), out = [], i = 0;
       while (i < toks.length) {
         var t = toks[i];
         if (/^\d+(\.\d+)?("|in|inch)$/.test(t) || /^\d+\/\d+("|in|inch)$/.test(t)) { out.push({ k: 'size', v: t.replace(/(in|inch)$/, '"') }); i++; continue; }
+        if (/^ral\d{4}$/.test(t)) { out.push({ k: 'word', v: 'ral ' + t.slice(3) }); i++; continue; }
+        if (t === 'ral' && i + 1 < toks.length && /^\d{4}$/.test(toks[i + 1])) { out.push({ k: 'word', v: 'ral ' + toks[i + 1] }); i += 2; continue; }
+        if (/^\d+$/.test(t) && toks[i + 1] === 'mm') { out.push({ k: 'len', v: +t }); i += 2; continue; }
         if (/^\d{3,4}$/.test(t)) { out.push({ k: 'len', v: +t }); i++; continue; }
         if (/^\d+$/.test(t) && i + 1 < toks.length && /^[a-z]+$/.test(toks[i + 1]) && !STOP[toks[i + 1]]) {
           var ph = [t], j = i + 1; while (j < toks.length && ph.length < 3 && /^[a-z]+$/.test(toks[j]) && !STOP[toks[j]]) { ph.push(toks[j]); j++; }
@@ -572,8 +575,11 @@
       var cv = compact(v); return function (h) { return h.t.indexOf(v) >= 0 || (cv.length >= 3 && /\d/.test(cv) && h.c.indexOf(cv) >= 0); };
     }
     function hay(code, r) {
-      var tt = norm(code + ' | ' + CAT.pkgs[r[0]] + ' | ' + r[2] + ' | ' + (r[3] || '') + ' | ' + (r[4] || ''));
-      return { t: tt, c: compact(code + CAT.pkgs[r[0]]), d: r[9] ? String(r[9]).split(',').map(Number) : [], err: null };
+      var fc = ''; try { fc = finishColorFor(r[4], r[3]) || ''; } catch (e) {}
+      var tt = norm(code + ' | ' + CAT.pkgs[r[0]] + ' | ' + r[2] + ' | ' + (r[3] || '') + ' | ' + (r[4] || '') + ' | mau son ' + fc);
+      var dd = r[9] ? String(r[9]).split(',').map(Number) : [], m, re = /(?:dai|<\d+>) ([\d.]+)/g, tn = norm(r[2]);
+      while ((m = re.exec(tn))) { var n = parseInt(m[1].replace(/\./g, ''), 10); if (n) dd.push(n); }
+      return { t: tt, c: compact(code + CAT.pkgs[r[0]]), d: dd, err: null };
     }
     var HAY = null;
     function search() {
