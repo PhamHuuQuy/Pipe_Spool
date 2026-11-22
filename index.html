@@ -175,7 +175,7 @@
  
   <div class="card ifCard" id="infoFindCard" hidden>
     <h3>🔎 Tra thông tin theo mô tả (khi mã bị mờ / không đầy đủ)</h3>
-    <label for="ifInput">Nhập các từ khóa cách nhau bằng dấu cách, ví dụ: <i>3" 2 mặt bích 210-DI</i> hoặc <i>cút 90 4" inox</i>. Mọi từ khóa đều phải khớp. Mã bị mờ có thể dùng ? (1 ký tự) hoặc * (nhiều ký tự), ví dụ <i>210-DI-380??-71</i>.</label>
+    <label for="ifInput">Nhập các từ khóa cách nhau bằng dấu cách, ví dụ: <i>3" 2 mặt bích 210-DI</i> hoặc <i>cút 90 4" inox</i>. Mọi từ khóa đều phải khớp. Tổng chiều dài ghi số, ví dụ <i>3" 2 mặt bích 630</i> (tìm theo kích thước trên bản vẽ, sai số khoảng ±2%). Mã bị mờ có thể dùng ? (1 ký tự) hoặc * (nhiều ký tự), ví dụ <i>210-DI-380??-71</i>.</label>
     <div class="inputWrap">
       <input type="text" id="ifInput" placeholder='VD: 3" 2 mặt bích 210-DI' autocapitalize="off">
       <button class="clearBtn" id="ifClear" type="button" title="Xóa nội dung">✕</button>
@@ -541,15 +541,16 @@
     function norm(t) { return String(t || '').toLowerCase().replace(/đ/g, 'd').normalize('NFD').replace(/[̀-ͯ]/g, ''); }
     function compact(t) { return norm(t).replace(/[^a-z0-9?*]/g, ''); }
     function escRe(t) { return t.replace(/[.+^${}()|[\]\\]/g, '\\$&'); }
-    var STOP = { chi: 1, tiet: 1, ma: 1, co: 1, va: 1, la: 1, cua: 1, dau: 1 };
-    // tách từ khóa: số nguyên đứng riêng + các chữ theo sau gộp thành 1 cụm ("2 mat bich"); 4" hoặc 3/4" giữ nguyên là kích thước
+    var STOP = { chi: 1, tiet: 1, ma: 1, co: 1, va: 1, la: 1, cua: 1, dau: 1, tong: 1, cong: 1, chieu: 1, dai: 1, tinh: 1, ca: 1, khoang: 1, xap: 1, xi: 1, gan: 1, mm: 1, ve: 1, voi: 1, can: 1, tim: 1, ong: 0 };
+    // tách từ khóa: 4" / 3/4" = kích thước; số nguyên + 1-2 chữ theo sau = cụm ("2 mat bich"); số 3-4 chữ số (hoặc ghi "630mm") = tổng chiều dài (so với các kích thước trên bản vẽ, sai số nhỏ)
     function parseQuery(q) {
-      var toks = norm(q).replace(/[“”″]/g, '"').split(/[\s,;]+/).filter(Boolean), out = [], i = 0;
+      var toks = norm(q).replace(/[“”″]/g, '"').replace(/(\d)\s*mm\b/g, '$1 mm').split(/[\s,;]+/).filter(Boolean), out = [], i = 0;
       while (i < toks.length) {
         var t = toks[i];
         if (/^\d+(\.\d+)?("|in|inch)$/.test(t) || /^\d+\/\d+("|in|inch)$/.test(t)) { out.push({ k: 'size', v: t.replace(/(in|inch)$/, '"') }); i++; continue; }
-        if (/^\d+$/.test(t) && i + 1 < toks.length && /^[a-z]/.test(toks[i + 1]) && !STOP[toks[i + 1]]) {
-          var ph = [t], j = i + 1; while (j < toks.length && /^[a-z]+$/.test(toks[j]) && !STOP[toks[j]]) { ph.push(toks[j]); j++; }
+        if (/^\d{3,4}$/.test(t)) { out.push({ k: 'len', v: +t }); i++; continue; }
+        if (/^\d+$/.test(t) && i + 1 < toks.length && /^[a-z]+$/.test(toks[i + 1]) && !STOP[toks[i + 1]]) {
+          var ph = [t], j = i + 1; while (j < toks.length && ph.length < 3 && /^[a-z]+$/.test(toks[j]) && !STOP[toks[j]]) { ph.push(toks[j]); j++; }
           out.push({ k: 'phrase', v: ph.join(' ') }); i = j; continue;
         }
         if (/[?*]/.test(t)) { out.push({ k: 'wild', v: t }); i++; continue; }
@@ -560,6 +561,10 @@
     }
     function makeTest(tk) {
       var v = tk.v;
+      if (tk.k === 'len') {
+        var tol = Math.max(8, Math.round(v * 0.02)), rl = new RegExp('(^|[^0-9.])' + v + '([^0-9]|$)');
+        return function (h) { var best = 1e9; (h.d || []).forEach(function (d) { var x = Math.abs(d - v); if (x < best) best = x; }); h.err = Math.min(h.err == null ? 1e9 : h.err, best); return best <= tol || rl.test(h.t); };
+      }
       if (tk.k === 'size') { var r1 = new RegExp('(^|[^0-9./])' + escRe(v)); return function (h) { return r1.test(h.t); }; }
       if (tk.k === 'num') { var r2 = new RegExp('(^|[^0-9.])' + escRe(v) + '([^0-9]|$)'); return function (h) { return r2.test(h.t); }; }
       if (tk.k === 'phrase') { var r3 = new RegExp('(^|[^0-9.])' + escRe(v)); return function (h) { return r3.test(h.t); }; }
@@ -568,7 +573,7 @@
     }
     function hay(code, r) {
       var tt = norm(code + ' | ' + CAT.pkgs[r[0]] + ' | ' + r[2] + ' | ' + (r[3] || '') + ' | ' + (r[4] || ''));
-      return { t: tt, c: compact(code + CAT.pkgs[r[0]]) };
+      return { t: tt, c: compact(code + CAT.pkgs[r[0]]), d: r[9] ? String(r[9]).split(',').map(Number) : [], err: null };
     }
     var HAY = null;
     function search() {
@@ -578,8 +583,9 @@
       var tests = parseQuery(q).map(makeTest);
       if (!tests.length) { cntEl.textContent = 'Chưa có từ khóa hợp lệ.'; listEl.hidden = true; return; }
       if (!HAY) { HAY = {}; Object.keys(CAT.items).forEach(function (k) { HAY[k] = hay(k, CAT.items[k]); }); }
-      Object.keys(CAT.items).forEach(function (k) { var h = HAY[k]; if (tests.every(function (f) { return f(h); })) results.push(k); });
-      results.sort(function (a, b) { var x = CAT.items[a], y = CAT.items[b]; return (x[0] - y[0]) || ((+x[1]) - (+y[1])) || (a < b ? -1 : 1); });
+      var hasLen = parseQuery(q).some(function (t) { return t.k === 'len'; });
+      Object.keys(CAT.items).forEach(function (k) { var h = HAY[k]; h.err = null; if (tests.every(function (f) { return f(h); })) { results.push(k); h.e2 = h.err; } });
+      results.sort(function (a, b) { var x = CAT.items[a], y = CAT.items[b]; if (hasLen && HAY[a].e2 !== HAY[b].e2) return (HAY[a].e2 == null ? 1e9 : HAY[a].e2) - (HAY[b].e2 == null ? 1e9 : HAY[b].e2); return (x[0] - y[0]) || ((+x[1]) - (+y[1])) || (a < b ? -1 : 1); });
       renderList();
     }
     function renderList() {
