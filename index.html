@@ -118,6 +118,17 @@
   .field2 { display:flex; gap:8px; }
   .field2 > * { flex:1; }
   select { width:100%; font:inherit; padding:10px; border:1px solid var(--line); border-radius:8px; background:#fff; }
+  .ifCard h3 { color:var(--ink); }
+  .ifList { max-height:36vh; overflow-y:auto; border:1px solid var(--line); border-radius:8px; margin-top:8px; -webkit-overflow-scrolling:touch; }
+  .ifItem { padding:8px 10px; border-bottom:1px solid var(--line); cursor:pointer; font-size:13px; background:#fff; }
+  .ifItem:last-child { border-bottom:0; }
+  .ifItem b { color:var(--pri); font-size:13.5px; }
+  .ifItem small { display:block; color:var(--mute); font-size:12px; margin-top:2px; line-height:1.35; }
+  .ifItem.sel { background:#dcebff; outline:2px solid var(--pri); outline-offset:-2px; }
+  .ifPrev { background:#eef3f8; border-radius:8px; padding:10px 12px; font-size:14px; margin-top:10px; }
+  .ifNav { display:flex; gap:8px; margin-top:8px; }
+  .ifNav button { flex:1; }
+  .ifNav[hidden], .ifList[hidden], .ifPrev[hidden] { display:none; }
 </style>
 </head>
 <body>
@@ -153,12 +164,33 @@
     </div>
     <div class="row" style="margin-top:8px">
       <button class="btn-sec btn-sm" id="btnPaintTable">📖 Bảng mã màu sơn</button>
+      <button class="btn-sec btn-sm" id="btnInfoFind">🔎 Tra thông tin theo mô tả</button>
     </div>
     <div class="cam" id="camBox">
       <video id="video" playsinline muted></video>
       <div class="frame"></div>
     </div>
     <div class="msg" id="camMsg"></div>
+  </div>
+ 
+  <div class="card ifCard" id="infoFindCard" hidden>
+    <h3>🔎 Tra thông tin theo mô tả (khi mã bị mờ / không đầy đủ)</h3>
+    <label for="ifInput">Nhập các từ khóa cách nhau bằng dấu cách, ví dụ: <i>3" 2 mặt bích 210-DI</i> hoặc <i>cút 90 4" inox</i>. Mọi từ khóa đều phải khớp. Mã bị mờ có thể dùng ? (1 ký tự) hoặc * (nhiều ký tự), ví dụ <i>210-DI-380??-71</i>.</label>
+    <div class="inputWrap">
+      <input type="text" id="ifInput" placeholder='VD: 3" 2 mặt bích 210-DI' autocapitalize="off">
+      <button class="clearBtn" id="ifClear" type="button" title="Xóa nội dung">✕</button>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn-pri btn-sm" id="ifGo">Tra</button>
+    </div>
+    <div class="parsed" id="ifCount"></div>
+    <div class="ifList" id="ifList" hidden></div>
+    <div class="ifPrev" id="ifPrev" hidden></div>
+    <div class="ifNav" id="ifNav" hidden>
+      <button class="btn-sec btn-sm" id="ifPrevBtn">◀ Mã trước</button>
+      <button class="btn-sec btn-sm" id="ifNextBtn">Mã sau ▶</button>
+      <button class="btn-pri btn-sm" id="ifOpen">Mở ở mục theo dõi công đoạn</button>
+    </div>
   </div>
  
   <div class="card" id="stageCard" hidden>
@@ -499,6 +531,88 @@
       renderMasterTable();
     }).catch(function () {});
   } catch (e) {}
+
+
+  /* ---- Tra thông tin theo mô tả: nhập từ khóa -> danh sách mã -> bấm mã nào hiện bản vẽ mã đó, danh sách + từ khóa giữ nguyên để chọn mã khác ---- */
+  (function () {
+    var card = document.getElementById('infoFindCard'), inp = document.getElementById('ifInput'), clr = document.getElementById('ifClear'),
+        listEl = document.getElementById('ifList'), prevEl = document.getElementById('ifPrev'), navEl = document.getElementById('ifNav'),
+        cntEl = document.getElementById('ifCount'), results = [], selIdx = -1, MAXSHOW = 300;
+    function norm(t) { return String(t || '').toLowerCase().replace(/đ/g, 'd').normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+    function compact(t) { return norm(t).replace(/[^a-z0-9?*]/g, ''); }
+    function escRe(t) { return t.replace(/[.+^${}()|[\]\\]/g, '\\$&'); }
+    var STOP = { chi: 1, tiet: 1, ma: 1, co: 1, va: 1, la: 1, cua: 1, dau: 1 };
+    // tách từ khóa: số nguyên đứng riêng + các chữ theo sau gộp thành 1 cụm ("2 mat bich"); 4" hoặc 3/4" giữ nguyên là kích thước
+    function parseQuery(q) {
+      var toks = norm(q).replace(/[“”″]/g, '"').split(/[\s,;]+/).filter(Boolean), out = [], i = 0;
+      while (i < toks.length) {
+        var t = toks[i];
+        if (/^\d+(\.\d+)?("|in|inch)$/.test(t) || /^\d+\/\d+("|in|inch)$/.test(t)) { out.push({ k: 'size', v: t.replace(/(in|inch)$/, '"') }); i++; continue; }
+        if (/^\d+$/.test(t) && i + 1 < toks.length && /^[a-z]/.test(toks[i + 1]) && !STOP[toks[i + 1]]) {
+          var ph = [t], j = i + 1; while (j < toks.length && /^[a-z]+$/.test(toks[j]) && !STOP[toks[j]]) { ph.push(toks[j]); j++; }
+          out.push({ k: 'phrase', v: ph.join(' ') }); i = j; continue;
+        }
+        if (/[?*]/.test(t)) { out.push({ k: 'wild', v: t }); i++; continue; }
+        if (STOP[t]) { i++; continue; }
+        out.push({ k: /^\d+$/.test(t) ? 'num' : 'word', v: t }); i++;
+      }
+      return out;
+    }
+    function makeTest(tk) {
+      var v = tk.v;
+      if (tk.k === 'size') { var r1 = new RegExp('(^|[^0-9./])' + escRe(v)); return function (h) { return r1.test(h.t); }; }
+      if (tk.k === 'num') { var r2 = new RegExp('(^|[^0-9.])' + escRe(v) + '([^0-9]|$)'); return function (h) { return r2.test(h.t); }; }
+      if (tk.k === 'phrase') { var r3 = new RegExp('(^|[^0-9.])' + escRe(v)); return function (h) { return r3.test(h.t); }; }
+      if (tk.k === 'wild') { var r4 = new RegExp(compact(v).replace(/\?/g, '.').replace(/\*/g, '.*')); return function (h) { return r4.test(h.c); }; }
+      var cv = compact(v); return function (h) { return h.t.indexOf(v) >= 0 || (cv.length >= 3 && /\d/.test(cv) && h.c.indexOf(cv) >= 0); };
+    }
+    function hay(code, r) {
+      var tt = norm(code + ' | ' + CAT.pkgs[r[0]] + ' | ' + r[2] + ' | ' + (r[3] || '') + ' | ' + (r[4] || ''));
+      return { t: tt, c: compact(code + CAT.pkgs[r[0]]) };
+    }
+    var HAY = null;
+    function search() {
+      if (!CAT) { cntEl.textContent = 'Đang tải danh mục bản vẽ (spools.json)… thử lại sau vài giây.'; return; }
+      var q = inp.value.trim(); results = []; selIdx = -1; prevEl.hidden = true; navEl.hidden = true;
+      if (!q) { cntEl.textContent = 'Hãy nhập thông tin mô tả.'; listEl.hidden = true; return; }
+      var tests = parseQuery(q).map(makeTest);
+      if (!tests.length) { cntEl.textContent = 'Chưa có từ khóa hợp lệ.'; listEl.hidden = true; return; }
+      if (!HAY) { HAY = {}; Object.keys(CAT.items).forEach(function (k) { HAY[k] = hay(k, CAT.items[k]); }); }
+      Object.keys(CAT.items).forEach(function (k) { var h = HAY[k]; if (tests.every(function (f) { return f(h); })) results.push(k); });
+      results.sort(function (a, b) { var x = CAT.items[a], y = CAT.items[b]; return (x[0] - y[0]) || ((+x[1]) - (+y[1])) || (a < b ? -1 : 1); });
+      renderList();
+    }
+    function renderList() {
+      if (!results.length) { cntEl.innerHTML = '<b>Không tìm thấy</b> mã nào khớp. Thử bớt từ khóa, hoặc dùng ? cho ký tự bị mờ.'; listEl.hidden = true; return; }
+      cntEl.innerHTML = 'Tìm thấy <b>' + results.length + '</b> mã' + (results.length > MAXSHOW ? ' (chỉ hiện ' + MAXSHOW + ' mã đầu — hãy thêm từ khóa để thu hẹp)' : '') + '. Bấm vào 1 mã để xem bản vẽ; muốn xem mã khác chỉ cần bấm tiếp mã khác trong danh sách.';
+      listEl.hidden = false;
+      listEl.innerHTML = results.slice(0, MAXSHOW).map(function (k, i) {
+        var r = CAT.items[k];
+        return '<div class="ifItem" data-i="' + i + '"><b>' + esc(k) + '</b> <span style="color:var(--mute)">· ' + esc(CAT.pkgs[r[0]]) + ' · tr. ' + esc(r[1]) + (r[8] ? '' : ' · (chưa có ảnh)') + '</span><small>' + esc(r[2].length > 150 ? r[2].slice(0, 150) + '…' : r[2]) + '</small></div>';
+      }).join('');
+    }
+    function select(i, noScroll) {
+      if (i < 0 || i >= Math.min(results.length, MAXSHOW)) return;
+      selIdx = i; var code = results[i], ci = catInfo(code);
+      Array.prototype.forEach.call(listEl.children, function (el) { el.classList.toggle('sel', +el.getAttribute('data-i') === i); });
+      var el = listEl.children[i]; if (el && el.scrollIntoView) { var lt = el.offsetTop, lb = lt + el.offsetHeight; if (lt < listEl.scrollTop || lb > listEl.scrollTop + listEl.clientHeight) listEl.scrollTop = Math.max(0, lt - 40); }
+      prevEl.hidden = false; navEl.hidden = false;
+      prevEl.innerHTML = '<b style="font-size:15px">' + esc(code) + '</b><span class="lastTouch" style="color:var(--ink)">Thuộc gói: <b>' + esc(ci.goi) + '</b> &nbsp;·&nbsp; Trang PDF: <b>' + esc(ci.trang) + '</b>' + (ci.vatlieu ? ' &nbsp;·&nbsp; Vật liệu ống: <b>' + esc(ci.vatlieu) + '</b>' : '') + '</span>' +
+        '<span class="lastTouch" style="color:var(--ink)">Mô tả: ' + esc(ci.mota) + '</span>' + weldsHtml(ci.welds, ci.nghi, ci.noiDinh) +
+        (ci.anh ? '<a href="' + esc(ci.anh) + '" target="_blank" rel="noopener"><img src="' + esc(ci.anh) + '" alt="Bản vẽ spool" style="max-width:100%;height:auto;border:1px solid #d7dde3;border-radius:6px;margin-top:8px;background:#fff"></a><div style="font-size:12px;color:var(--mute);margin-top:4px">Bấm vào ảnh để phóng to.</div>' : '<span class="lastTouch" style="color:var(--warn)">Chưa có ảnh bản vẽ cho mã này.</span>');
+      document.getElementById('ifPrevBtn').disabled = i === 0; document.getElementById('ifNextBtn').disabled = i >= Math.min(results.length, MAXSHOW) - 1;
+      if (!noScroll) { var r = prevEl.getBoundingClientRect(); if (r.top < 0 || r.top > window.innerHeight * 0.6) prevEl.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    }
+    listEl.addEventListener('click', function (e) { var n = e.target.closest ? e.target.closest('.ifItem') : null; if (n) select(+n.getAttribute('data-i')); });
+    document.getElementById('ifGo').onclick = search;
+    inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); search(); } });
+    inp.addEventListener('input', function () { clr.classList.toggle('show', !!inp.value); });
+    clr.onclick = function () { inp.value = ''; clr.classList.remove('show'); results = []; listEl.hidden = true; prevEl.hidden = true; navEl.hidden = true; cntEl.textContent = ''; inp.focus(); };
+    document.getElementById('ifPrevBtn').onclick = function () { select(selIdx - 1, true); };
+    document.getElementById('ifNextBtn').onclick = function () { select(selIdx + 1, true); };
+    document.getElementById('ifOpen').onclick = function () { if (selIdx >= 0) { codeInput.value = results[selIdx]; codeInput.dispatchEvent(new Event('input')); loadCode(results[selIdx]); stageCard.scrollIntoView({ behavior: 'smooth' }); } };
+    document.getElementById('btnInfoFind').onclick = function () { card.hidden = !card.hidden; if (!card.hidden) { card.scrollIntoView({ behavior: 'smooth', block: 'start' }); setTimeout(function () { inp.focus(); }, 300); } };
+  })();
 
   /* ---- Tách mã chi tiết thô (chỉ số + chữ, không dấu, không "SP") theo bố cục:
      !(3 số) - *(2-3 chữ) - #(5 số) - ?(2 số) - $(2 số, số SP)
